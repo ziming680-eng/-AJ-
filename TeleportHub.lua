@@ -16,15 +16,20 @@ local K_COORDS = "TPH_coords_v1"
 local K_GROUPS = "TPH_groups_v1"
 local K_QUICK  = "TPH_quickGroupId"
 local K_INTERV = "TPH_interval_v1"
+local K_SPEED  = "TPH_speed_v1"
 
 local Coords = {}
 local Groups = {}
 local QuickGroupId = nil
 local Sel = {}
 local Interval = 0.5
+local Speed = 30
 local LoopRunning = false
 local LoopThread = nil
 local LoopGroupId = nil
+local MoveRunning = false
+local MoveThread = nil
+local MoveGroupId = nil
 local minimized = false
 local quickOn = false
 local currentTab = 1
@@ -321,6 +326,7 @@ local function getPos()
 end
 
 local refreshC, refreshG, startLoop, stopLoop, openManage, applyLayout, switchTab, updateQuickUI, makeDrag
+local startMove, stopMove, updateMoveUI
 
 local Main = make("Frame", {
     Size = UDim2.new(0, 280, 0, 380),
@@ -417,9 +423,32 @@ CLayout.Parent = CList
 
 local CrGB = button(GPage, "➕ 从选中坐标创建组合", UDim2.new(1, -20, 0, 36), UDim2.new(0, 10, 0, 8), C_PURP, 13, 12)
 local MngB = button(GPage, "🔧 管理组合", UDim2.new(1, -20, 0, 32), UDim2.new(0, 10, 0, 50), C_BG3, 13, 12)
+local MoveBar = make("Frame", {
+    Size = UDim2.new(1, -20, 0, 34),
+    Position = UDim2.new(0, 10, 0, 88),
+    BackgroundTransparency = 1,
+    ZIndex = 12,
+    Parent = GPage
+})
+local MoveBtn = button(MoveBar, "🚀 快速移动", UDim2.new(0, 150, 0, 34), UDim2.new(0, 0, 0, 0), C_PURP, 12, 13)
+label(MoveBar, "速度", UDim2.new(0, 30, 1, 0), UDim2.new(0, 152, 0, 0), C_TXT2, 11, 13)
+local SpeedBox = make("TextBox", {
+    Text = tostring(Speed),
+    Size = UDim2.new(0, 72, 0, 30),
+    Position = UDim2.new(0, 184, 0, 2),
+    BackgroundColor3 = C_BG3,
+    TextColor3 = C_WHITE,
+    PlaceholderText = "30",
+    PlaceholderColor3 = C_TXT2,
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    ClearTextOnFocus = false,
+    ZIndex = 13,
+    Parent = MoveBar
+})
 local GList = make("Frame", {
     Size = UDim2.new(1, -20, 0, 0),
-    Position = UDim2.new(0, 10, 0, 88),
+    Position = UDim2.new(0, 10, 0, 126),
     BackgroundTransparency = 1,
     ZIndex = 12,
     Parent = GPage
@@ -488,6 +517,85 @@ stopLoop = function()
     end
     refreshG()
     updateQuickUI()
+    updateMoveUI()
+end
+
+updateMoveUI = function()
+    if not MoveBtn then return end
+    MoveBtn.Text = MoveRunning and "■ 停止移动" or "🚀 快速移动"
+    MoveBtn.BackgroundColor3 = MoveRunning and C_ORG or C_PURP
+end
+
+stopMove = function()
+    MoveRunning = false
+    MoveGroupId = nil
+    if MoveThread then
+        pcall(function() task.cancel(MoveThread) end)
+        MoveThread = nil
+    end
+    updateMoveUI()
+end
+
+startMove = function()
+    if MoveRunning then
+        stopMove()
+        showToast("■ 已停止快速移动")
+        return
+    end
+    local g = QuickGroupId and findGroup(QuickGroupId) or nil
+    if not g then
+        showToast("⚠️ 请先在组合里选中一个组合")
+        return
+    end
+    local pts = {}
+    for _, cid in ipairs(g.coordIds or {}) do
+        local c = findCoord(cid)
+        if c then
+            table.insert(pts, Vector3.new(c.x, c.y, c.z))
+            if #pts >= 2 then break end
+        end
+    end
+    if #pts < 2 then
+        showToast("⚠️ 组合内需要至少 2 个有效坐标")
+        return
+    end
+    if LoopRunning then stopLoop() end
+    MoveRunning = true
+    MoveGroupId = g.id
+    updateMoveUI()
+    showToast("🚀 " .. Speed .. " studs/s · 取前2个坐标 A↔B")
+    MoveThread = task.spawn(function()
+        local a, b = pts[1], pts[2]
+        local cur = getPos() or a
+        local goingB = false
+        local target = a
+        local rot = CFrame.new()
+        local ch0 = LP.Character
+        local r0 = ch0 and (ch0:FindFirstChild("HumanoidRootPart") or ch0.PrimaryPart)
+        if r0 then rot = r0.CFrame - r0.CFrame.Position end
+        local hb = safe(function()
+            return game:GetService("RunService").Heartbeat
+        end)
+        while MoveRunning do
+            local dt = hb and hb:Wait() or task.wait(0.03)
+            if not MoveRunning then break end
+            dt = math.min(tonumber(dt) or 0.03, 0.1)
+            local ch = LP.Character
+            if not ch or not ch.PrimaryPart then break end
+            local d = target - cur
+            local dist = d.Magnitude
+            local step = Speed * dt
+            if dist <= step or dist < 0.05 then
+                cur = target
+                goingB = not goingB
+                target = goingB and b or a
+            else
+                cur = cur + d.Unit * step
+            end
+            pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
+        end
+        if MoveRunning then stopMove() end
+    end)
 end
 
 startLoop = function(g)
@@ -496,6 +604,7 @@ startLoop = function(g)
         showToast("■ 已关闭循环传送")
         return
     end
+    if MoveRunning then stopMove() end
     if not g or not g.coordIds or #g.coordIds == 0 then
         showToast("组合为空")
         return
@@ -565,6 +674,7 @@ refreshC = function()
         end)
         tp.MouseButton1Click:Connect(function()
             if LoopRunning then stopLoop() end
+            if MoveRunning then stopMove() end
             tel(c.x, c.y, c.z)
         end)
         rn.MouseButton1Click:Connect(function()
@@ -596,6 +706,7 @@ refreshC = function()
             saveAttr(K_GROUPS, Groups)
             trySaveDS(K_COORDS, Coords)
             trySaveDS(K_GROUPS, Groups)
+            if MoveRunning then stopMove() end
             refreshC()
             refreshG()
             updateQuickUI()
@@ -652,6 +763,7 @@ refreshG = function()
             Groups = ng
             if QuickGroupId == g.id then QuickGroupId = nil end
             if LoopGroupId == g.id then stopLoop() end
+            if MoveGroupId == g.id then stopMove() end
             safe(function() LP:SetAttribute(K_QUICK, QuickGroupId or "") end)
             saveAttr(K_GROUPS, Groups)
             trySaveDS(K_GROUPS, Groups)
@@ -661,7 +773,7 @@ refreshG = function()
     end
     local h = #sorted * 50
     GList.Size = UDim2.new(1, -20, 0, h)
-    GPage.CanvasSize = UDim2.new(0, 0, 0, 88 + h + 12)
+    GPage.CanvasSize = UDim2.new(0, 0, 0, 126 + h + 12)
 end
 
 openManage = function()
@@ -810,6 +922,7 @@ openManage = function()
                 Groups = ng
                 if QuickGroupId == g.id then QuickGroupId = nil end
                 if LoopGroupId == g.id then stopLoop() end
+            if MoveGroupId == g.id then stopMove() end
                 safe(function() LP:SetAttribute(K_QUICK, QuickGroupId or "") end)
                 saveAttr(K_GROUPS, Groups)
                 trySaveDS(K_GROUPS, Groups)
@@ -953,6 +1066,19 @@ end)
 
 MngB.MouseButton1Click:Connect(function() openManage() end)
 
+MoveBtn.MouseButton1Click:Connect(function() startMove() end)
+SpeedBox.FocusLost:Connect(function()
+    local n = tonumber(SpeedBox.Text)
+    if n and n >= 1 and n <= 300 then
+        Speed = n
+        safe(function() LP:SetAttribute(K_SPEED, Speed) end)
+        showToast("🚀 速度 " .. Speed .. " studs/s")
+    else
+        SpeedBox.Text = tostring(Speed)
+        showToast("速度范围 1~300")
+    end
+end)
+
 LoadB.MouseButton1Click:Connect(function()
     local c = tryLoadDS(K_COORDS)
     local g = tryLoadDS(K_GROUPS)
@@ -980,7 +1106,7 @@ JsnB.MouseButton1Click:Connect(function()
     local j = safe(function()
         return HttpService:JSONEncode({
             coords = Coords, groups = Groups,
-            quick = QuickGroupId, interval = Interval
+            quick = QuickGroupId, interval = Interval, speed = Speed
         })
     end)
     ExpB.Text = j or "导出失败"
@@ -993,6 +1119,7 @@ ClrB.MouseButton1Click:Connect(function()
     local b = modalConfirm("再次确认", "真的要清空吗？此操作不可撤销。", "清空")
     if not b then return end
     if LoopRunning then stopLoop() end
+    if MoveRunning then stopMove() end
     Coords = {}
     Groups = {}
     QuickGroupId = nil
@@ -1080,6 +1207,7 @@ end)
 
 LP.CharacterAdded:Connect(function()
     if LoopRunning then stopLoop() end
+    if MoveRunning then stopMove() end
 end)
 
 local c = loadAttr(K_COORDS)
@@ -1090,10 +1218,14 @@ local q = safe(function() return LP:GetAttribute(K_QUICK) end)
 if type(q) == "string" and q ~= "" then QuickGroupId = q end
 local iv = safe(function() return LP:GetAttribute(K_INTERV) end)
 if type(iv) == "number" and iv >= 0.1 then Interval = iv end
+local sp = safe(function() return LP:GetAttribute(K_SPEED) end)
+if type(sp) == "number" and sp >= 1 and sp <= 300 then Speed = sp end
+SpeedBox.Text = tostring(Speed)
 
 refreshC()
 refreshG()
 switchTab(1)
 applyLayout()
 updateQuickUI()
+updateMoveUI()
 showToast("⚡ TeleportHub 已加载")
