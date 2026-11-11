@@ -345,9 +345,10 @@ local Title = make("Frame", {
     CornerRadius = 10,
     Parent = Main
 })
-local TitleLbl = label(Title, "⚡ TeleportHub", UDim2.new(1, -84, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 14, 12)
-local MinB = button(Title, "—", UDim2.new(0, 32, 0, 30), UDim2.new(1, -68, 0, 2), C_BG3, 16, 12)
-local CloseB = button(Title, "✕", UDim2.new(0, 32, 0, 30), UDim2.new(1, -34, 0, 2), C_RED, 15, 12)
+local TitleLbl = label(Title, "⚡ TeleportHub", UDim2.new(1, -128, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 13, 12)
+local QuitB = button(Title, "关脚本", UDim2.new(0, 40, 0, 30), UDim2.new(1, -118, 0, 2), Color3.fromRGB(150, 45, 45), 9, 12)
+local MinB = button(Title, "—", UDim2.new(0, 32, 0, 30), UDim2.new(1, -74, 0, 2), C_BG3, 16, 12)
+local CloseB = button(Title, "X", UDim2.new(0, 32, 0, 30), UDim2.new(1, -38, 0, 2), C_RED, 15, 12)
 
 local Tabs = make("Frame", {
     Size = UDim2.new(1, 0, 0, 32),
@@ -495,7 +496,7 @@ local QGo = button(QPanel, "⚡ 快捷传送", UDim2.new(0, 142, 0, 44), UDim2.n
 QGo.Visible = false
 
 local FloatB = make("TextButton", {
-    Text = "🧭",
+    Text = "开",
     Size = UDim2.new(0, 44, 0, 44),
     Position = UDim2.new(0, 12, 0.5, -22),
     BackgroundColor3 = C_BLUE,
@@ -550,10 +551,7 @@ startMove = function()
     local pts = {}
     for _, cid in ipairs(g.coordIds or {}) do
         local c = findCoord(cid)
-        if c then
-            table.insert(pts, Vector3.new(c.x, c.y, c.z))
-            if #pts >= 2 then break end
-        end
+        if c then table.insert(pts, Vector3.new(c.x, c.y, c.z)) end
     end
     if #pts < 2 then
         showToast("⚠️ 组合内需要至少 2 个有效坐标")
@@ -563,12 +561,11 @@ startMove = function()
     MoveRunning = true
     MoveGroupId = g.id
     updateMoveUI()
-    showToast("🚀 " .. Speed .. " studs/s · 取前2个坐标 A↔B")
+    showToast("🚀 " .. Speed .. " studs/s · " .. #pts .. "个坐标循环")
     MoveThread = task.spawn(function()
-        local a, b = pts[1], pts[2]
-        local cur = getPos() or a
-        local goingB = false
-        local target = a
+        local n = #pts
+        local idx = 1
+        local cur = getPos() or pts[1]
         local rot = CFrame.new()
         local ch0 = LP.Character
         local r0 = ch0 and (ch0:FindFirstChild("HumanoidRootPart") or ch0.PrimaryPart)
@@ -582,13 +579,13 @@ startMove = function()
             dt = math.min(tonumber(dt) or 0.03, 0.1)
             local ch = LP.Character
             if not ch or not ch.PrimaryPart then break end
+            local target = pts[idx]
             local d = target - cur
             local dist = d.Magnitude
             local step = Speed * dt
             if dist <= step or dist < 0.05 then
                 cur = target
-                goingB = not goingB
-                target = goingB and b or a
+                idx = idx % n + 1
             else
                 cur = cur + d.Unit * step
             end
@@ -613,7 +610,7 @@ startLoop = function(g)
     LoopGroupId = g.id
     refreshG()
     updateQuickUI()
-    showToast("▶ 循环传送: " .. tostring(g.name) .. " / 间隔 " .. Interval .. "s")
+    showToast("循环传送: " .. tostring(g.name) .. " / 间隔 " .. Interval .. "s")
     LoopThread = task.spawn(function()
         local i = 1
         while LoopRunning do
@@ -654,23 +651,32 @@ refreshC = function()
     CCount.Text = "📍 所有坐标 (" .. #Coords .. ")"
     for _, c in ipairs(Coords) do
         local row = make("Frame", {
-            Size = UDim2.new(1, 0, 0, 46),
+            Size = UDim2.new(1, 0, 0, 62),
             BackgroundColor3 = Sel[c.id] and C_BG3 or C_BG2,
             ZIndex = 13,
             CornerRadius = 6,
             Parent = CList
         })
-        local cb = button(row, Sel[c.id] and "☑" or "☐",
-            UDim2.new(0, 30, 0, 30), UDim2.new(0, 6, 0, 8), C_BG, 15, 14)
-        label(row, tostring(c.name or "?") .. "\nX" .. math.floor(c.x) ..
-            " Y" .. math.floor(c.y) .. " Z" .. math.floor(c.z),
-            UDim2.new(0, 112, 1, 0), UDim2.new(0, 42, 0, 0), C_TXT, 10, 14)
-        local tp = button(row, "传", UDim2.new(0, 30, 0, 28), UDim2.new(0.60, 0, 0, 9), C_BLUE, 11, 14)
-        local rn = button(row, "改名", UDim2.new(0, 34, 0, 28), UDim2.new(0.73, 0, 0, 9), C_ORG, 10, 14)
-        local dl = button(row, "删", UDim2.new(0, 30, 0, 28), UDim2.new(0.88, 0, 0, 9), C_RED, 11, 14)
+        local cb = button(row, Sel[c.id] and "√" or "□",
+            UDim2.new(0, 28, 0, 28), UDim2.new(0, 6, 0, 4), Sel[c.id] and C_BLUE or C_BG, 16, 14)
+        local one = button(row, "单选", UDim2.new(0, 44, 0, 28), UDim2.new(0, 38, 0, 4),
+            Sel[c.id] and C_BLUE or C_BG3, 10, 14)
+        label(row, tostring(c.name or "?"),
+            UDim2.new(1, -94, 0, 28), UDim2.new(0, 88, 0, 4), C_TXT, 12, 14)
+        label(row, "X" .. math.floor(c.x) .. " Y" .. math.floor(c.y) .. " Z" .. math.floor(c.z),
+            UDim2.new(0, 140, 0, 26), UDim2.new(0, 8, 0, 32), C_TXT2, 10, 14)
+        local tp = button(row, "传", UDim2.new(0, 34, 0, 26), UDim2.new(0, 148, 0, 32), C_BLUE, 11, 14)
+        local rn = button(row, "改名", UDim2.new(0, 40, 0, 26), UDim2.new(0, 186, 0, 32), C_ORG, 10, 14)
+        local dl = button(row, "删", UDim2.new(0, 28, 0, 26), UDim2.new(0, 230, 0, 32), C_RED, 11, 14)
         cb.MouseButton1Click:Connect(function()
             Sel[c.id] = not Sel[c.id]
             refreshC()
+        end)
+        one.MouseButton1Click:Connect(function()
+            Sel = {}
+            Sel[c.id] = true
+            refreshC()
+            showToast("单选: " .. tostring(c.name or "?"))
         end)
         tp.MouseButton1Click:Connect(function()
             if LoopRunning then stopLoop() end
@@ -712,7 +718,7 @@ refreshC = function()
             updateQuickUI()
         end)
     end
-    local h = #Coords * 50
+    local h = #Coords * 66
     CList.Size = UDim2.new(1, -20, 0, h)
     CPage.CanvasSize = UDim2.new(0, 0, 0, 84 + h + 12)
 end
@@ -788,8 +794,9 @@ openManage = function()
         Parent = ov
     })
     label(win, "📁 管理组合", UDim2.new(1, -48, 0, 28), UDim2.new(0, 12, 0, 8), C_WHITE, 15, z + 2)
-    local closeBtn = button(win, "✕", UDim2.new(0, 30, 0, 28), UDim2.new(1, -38, 0, 8), C_RED, 14, z + 2)
+    local closeBtn = button(win, "X", UDim2.new(0, 30, 0, 28), UDim2.new(1, -38, 0, 8), C_RED, 14, z + 2)
     label(win, "间隔(秒)", UDim2.new(0, 80, 0, 26), UDim2.new(0, 12, 0, 40), C_TXT2, 12, z + 2)
+    label(win, "长按坐标拖动排序", UDim2.new(0, 110, 0, 26), UDim2.new(0, 166, 0, 40), C_ORG, 10, z + 2)
     local intBox = make("TextBox", {
         Text = tostring(Interval),
         Size = UDim2.new(0, 70, 0, 26),
@@ -822,6 +829,9 @@ openManage = function()
     })
 
     local connA, connB, connC, rebuild
+    local STRIDE = 34
+    local press, drag, ghost = nil, nil, nil
+    local groupRows = {}
     local closed = false
     local function close()
         if closed then return end
@@ -829,6 +839,9 @@ openManage = function()
         for _, c in ipairs({connA, connB, connC}) do
             if c then safe(function() c:Disconnect() end) end
         end
+        if ghost then safe(function() ghost:Destroy() end) ghost = nil end
+        scroll.ScrollingEnabled = true
+        press, drag = nil, nil
         closeOverlay(ov)
     end
     closeBtn.MouseButton1Click:Connect(close)
@@ -836,34 +849,90 @@ openManage = function()
         if i.KeyCode == Enum.KeyCode.Escape and ov.ZIndex == modalDepth then close() end
     end)
 
-    local dragState = nil
+    local function endDrag(commit)
+        if ghost then safe(function() ghost:Destroy() end) ghost = nil end
+        scroll.ScrollingEnabled = true
+        if drag and commit then
+            local d = drag
+            local ids = d.g.coordIds
+            if d.from ~= d.to and d.from >= 1 and d.from <= #ids then
+                local id = table.remove(ids, d.from)
+                local to = math.clamp(d.to, 1, #ids + 1)
+                table.insert(ids, to, id)
+                saveAttr(K_GROUPS, Groups)
+                trySaveDS(K_GROUPS, Groups)
+                refreshG()
+                showToast("顺序 " .. d.from .. " -> " .. to)
+            end
+        end
+        drag = nil
+        press = nil
+        rebuild()
+    end
+
+    local function enterDrag(p)
+        press = nil
+        local info = groupRows[p.g.id]
+        if not info then return end
+        scroll.ScrollingEnabled = false
+        local c = findCoord(p.g.coordIds[p.idx])
+        ghost = make("Frame", {
+            Size = UDim2.new(0, 244, 0, 32),
+            Position = UDim2.new(0, p.sx - 24, 0, p.sy - 16),
+            BackgroundColor3 = C_ORG,
+            ZIndex = 950,
+            CornerRadius = 8,
+            Parent = Gui
+        })
+        label(ghost, tostring(p.idx) .. "  " .. (c and tostring(c.name or "?") or "已删除"),
+            UDim2.new(1, -12, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 12, 951)
+        drag = {g = p.g, from = p.idx, to = p.idx, info = info}
+        local r = info.rows[p.idx]
+        if r then r.BackgroundTransparency = 0.65 end
+        showToast("拖到目标位置后松手")
+    end
+
     connA = UIS.InputChanged:Connect(function(i)
-        if not dragState then return end
         if i.UserInputType ~= Enum.UserInputType.MouseMovement and
             i.UserInputType ~= Enum.UserInputType.Touch then return end
-        local dy = i.Position.Y - dragState.sy
-        if math.abs(dy) < 22 then return end
-        local d = dragState
-        dragState = nil
-        d.scroll.ScrollingEnabled = true
-        local ids = d.g.coordIds
-        if dy > 0 and d.idx < #ids then
-            ids[d.idx], ids[d.idx + 1] = ids[d.idx + 1], ids[d.idx]
-        elseif dy < 0 and d.idx > 1 then
-            ids[d.idx], ids[d.idx - 1] = ids[d.idx - 1], ids[d.idx]
-        else
+        if press and not drag then
+            if math.abs(i.Position.X - press.sx) > 10 or
+                math.abs(i.Position.Y - press.sy) > 10 then
+                press = nil
+            end
             return
         end
-        saveAttr(K_GROUPS, Groups)
-        trySaveDS(K_GROUPS, Groups)
-        rebuild()
-        refreshG()
-        showToast("顺序已更新")
+        if not drag then return end
+        if ghost then
+            ghost.Position = UDim2.new(0, i.Position.X - 24, 0, i.Position.Y - 16)
+        end
+        local d = drag
+        local canvasY = i.Position.Y - scroll.AbsolutePosition.Y + scroll.CanvasPosition.Y
+        local n = #d.info.rows
+        if n == 0 then return end
+        local to = math.clamp(math.floor((canvasY - d.info.yStart) / STRIDE) + 1, 1, n)
+        d.to = to
+        for idx2, r in ipairs(d.info.rows) do
+            local disp = idx2
+            if idx2 == d.from then
+                disp = to
+            elseif d.from < to and idx2 > d.from and idx2 <= to then
+                disp = idx2 - 1
+            elseif d.from > to and idx2 >= to and idx2 < d.from then
+                disp = idx2 + 1
+            end
+            r.Position = UDim2.new(0, 4, 0, d.info.yStart + (disp - 1) * STRIDE)
+            r.BackgroundColor3 = (idx2 == d.from) and C_ORG or C_BG2
+        end
     end)
-    connB = UIS.InputEnded:Connect(function()
-        if dragState then
-            dragState.scroll.ScrollingEnabled = true
-            dragState = nil
+    connB = UIS.InputEnded:Connect(function(i)
+        if i.UserInputType ~= Enum.UserInputType.MouseButton1 and
+            i.UserInputType ~= Enum.UserInputType.Touch then return end
+        if drag then
+            endDrag(true)
+        elseif press then
+            press = nil
+            scroll.ScrollingEnabled = true
         end
     end)
 
@@ -932,6 +1001,8 @@ openManage = function()
                 showToast("已删除组合")
             end)
             y = y + 36
+            local info = {rows = {}, yStart = y}
+            groupRows[g.id] = info
             for idx, cid in ipairs(g.coordIds or {}) do
                 local c = findCoord(cid)
                 local row = make("Frame", {
@@ -942,20 +1013,35 @@ openManage = function()
                     ZIndex = z + 3,
                     Parent = scroll
                 })
-                local txt = tostring(idx) .. ". " .. (c and tostring(c.name or "?") or "已删除")
+                make("TextLabel", {
+                    Text = tostring(idx),
+                    Size = UDim2.new(0, 22, 0, 22),
+                    Position = UDim2.new(0, 6, 0, 4),
+                    BackgroundColor3 = C_BG3,
+                    TextColor3 = C_ORG,
+                    Font = Enum.Font.GothamBold,
+                    TextSize = 12,
+                    ZIndex = z + 4,
+                    Parent = row
+                })
+                local txt = (c and tostring(c.name or "?") or "已删除")
                 if c then
-                    txt = txt .. "  " .. math.floor(c.x) .. "," .. math.floor(c.y) .. "," .. math.floor(c.z)
+                    txt = txt .. "   " .. math.floor(c.x) .. "," .. math.floor(c.y) .. "," .. math.floor(c.z)
                 end
-                label(row, txt, UDim2.new(1, -16, 1, 0), UDim2.new(0, 12, 0, 0),
+                label(row, txt, UDim2.new(1, -36, 1, 0), UDim2.new(0, 34, 0, 0),
                     c and C_TXT2 or C_RED, 10, z + 4)
-                row.InputBegan:Connect(function(i)
-                    if i.UserInputType == Enum.UserInputType.MouseButton1 or
-                        i.UserInputType == Enum.UserInputType.Touch then
-                        dragState = {g = g, idx = idx, sy = i.Position.Y, scroll = scroll}
-                        scroll.ScrollingEnabled = false
+                table.insert(info.rows, row)
+                row.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or
+                        input.UserInputType == Enum.UserInputType.Touch then
+                        local p = {g = g, idx = idx, sx = input.Position.X, sy = input.Position.Y}
+                        press = p
+                        task.delay(0.32, function()
+                            if press == p and not drag then enterDrag(p) end
+                        end)
                     end
                 end)
-                y = y + 34
+                y = y + STRIDE
             end
             y = y + 8
         end
@@ -987,16 +1073,20 @@ applyLayout = function()
     end
 end
 
-makeDrag = function(frame, handle, boundsFrame)
+makeDrag = function(frame, handle, boundsFrame, movedRef)
     local dragging = false
     local startInput = nil
-    local startPos = nil
+    local startAbs = nil
     handle.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1 or
             i.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             startInput = i.Position
-            startPos = frame.Position
+            startAbs = frame.AbsolutePosition
+            if movedRef then movedRef.moved = false end
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
         end
     end)
     UIS.InputChanged:Connect(function(i)
@@ -1004,6 +1094,9 @@ makeDrag = function(frame, handle, boundsFrame)
         if i.UserInputType ~= Enum.UserInputType.MouseMovement and
             i.UserInputType ~= Enum.UserInputType.Touch then return end
         local d = i.Position - startInput
+        if movedRef and (math.abs(d.X) > 6 or math.abs(d.Y) > 6) then
+            movedRef.moved = true
+        end
         local maxX, maxY
         if boundsFrame then
             maxX = boundsFrame.AbsoluteSize.X - frame.AbsoluteSize.X
@@ -1013,8 +1106,8 @@ makeDrag = function(frame, handle, boundsFrame)
             maxX = vp.X - frame.AbsoluteSize.X
             maxY = vp.Y - frame.AbsoluteSize.Y
         end
-        local nx = math.clamp(startPos.X.Offset + d.X, 0, math.max(0, maxX))
-        local ny = math.clamp(startPos.Y.Offset + d.Y, 0, math.max(0, maxY))
+        local nx = math.clamp(startAbs.X + d.X, 0, math.max(0, maxX))
+        local ny = math.clamp(startAbs.Y + d.Y, 0, math.max(0, maxY))
         frame.Position = UDim2.new(0, nx, 0, ny)
     end)
     UIS.InputEnded:Connect(function(i)
@@ -1150,14 +1243,27 @@ CloseB.MouseButton1Click:Connect(function()
     FloatB.Visible = true
 end)
 
+QuitB.MouseButton1Click:Connect(function()
+    local ok = modalConfirm("关闭脚本", "彻底关闭 TeleportHub？\n数据会保留，下次执行自动恢复。", "关闭")
+    if not ok then return end
+    if LoopRunning then stopLoop() end
+    if MoveRunning then stopMove() end
+    safe(function() Gui:Destroy() end)
+end)
+
+local floatMoved = {moved = false}
 FloatB.MouseButton1Click:Connect(function()
+    if floatMoved.moved then
+        floatMoved.moved = false
+        return
+    end
     Main.Visible = true
     FloatB.Visible = false
 end)
 
 makeDrag(Main, Title)
 makeDrag(Main, TitleLbl)
-makeDrag(FloatB)
+makeDrag(FloatB, FloatB, nil, floatMoved)
 
 local qDrag, qStart, qStartPos, qMoved = false, nil, nil, false
 QToggle.InputBegan:Connect(function(i)
@@ -1166,7 +1272,7 @@ QToggle.InputBegan:Connect(function(i)
         qDrag = true
         qMoved = false
         qStart = i.Position
-        qStartPos = QPanel.Position
+        qStartPos = QPanel.AbsolutePosition - Main.AbsolutePosition
     end
 end)
 UIS.InputChanged:Connect(function(i)
@@ -1179,8 +1285,8 @@ UIS.InputChanged:Connect(function(i)
     local maxX = Main.AbsoluteSize.X - QPanel.AbsoluteSize.X
     local maxY = Main.AbsoluteSize.Y - QPanel.AbsoluteSize.Y
     QPanel.Position = UDim2.new(0,
-        math.clamp(qStartPos.X.Offset + d.X, 0, math.max(0, maxX)), 0,
-        math.clamp(qStartPos.Y.Offset + d.Y, 0, math.max(0, maxY)))
+        math.clamp(qStartPos.X + d.X, 0, math.max(0, maxX)), 0,
+        math.clamp(qStartPos.Y + d.Y, 0, math.max(0, maxY)))
 end)
 UIS.InputEnded:Connect(function()
     qDrag = false
