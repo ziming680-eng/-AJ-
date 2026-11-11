@@ -1,4 +1,4 @@
--- TeleportHub · Delta 执行器专用（纯客户端 / 手机竖屏）
+-- TC坐标传送 · Delta 执行器专用（纯客户端 / 手机竖屏）
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
@@ -45,6 +45,16 @@ local C_PURP = Color3.fromRGB(142, 86, 214)
 local C_TXT  = Color3.fromRGB(240, 242, 248)
 local C_TXT2 = Color3.fromRGB(158, 163, 178)
 local C_WHITE= Color3.fromRGB(255, 255, 255)
+
+local Rainbow = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 95, 95)),
+    ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 190, 70)),
+    ColorSequenceKeypoint.new(0.34, Color3.fromRGB(90, 225, 130)),
+    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(70, 185, 255)),
+    ColorSequenceKeypoint.new(0.67, Color3.fromRGB(150, 110, 255)),
+    ColorSequenceKeypoint.new(0.84, Color3.fromRGB(255, 110, 205)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 95, 95))
+})
 
 local function safe(fn)
     local ok, res = pcall(fn)
@@ -148,12 +158,38 @@ local function button(parent, text, size, pos, color, fs, z)
 end
 
 local Gui = make("ScreenGui", {
-    Name = "TeleportHub_Delta",
+    Name = "TC坐标传送",
     ResetOnSpawn = false,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     DisplayOrder = 999,
     Parent = PlayerGui
 })
+
+local spinTween = nil
+local function rainbowBorder(target, pad, radius, spin)
+    local back = make("Frame", {
+        Size = UDim2.new(target.Size.X.Scale, target.Size.X.Offset + pad * 2,
+            target.Size.Y.Scale, target.Size.Y.Offset + pad * 2),
+        Position = UDim2.new(target.Position.X.Scale, target.Position.X.Offset - pad,
+            target.Position.Y.Scale, target.Position.Y.Offset - pad),
+        BackgroundColor3 = C_WHITE,
+        ZIndex = math.max(1, target.ZIndex - 1),
+        CornerRadius = radius,
+        Parent = target.Parent
+    })
+    local grad = Instance.new("UIGradient")
+    grad.Color = Rainbow
+    grad.Rotation = 0
+    grad.Parent = back
+    if spin then
+        local tw = TweenService:Create(grad,
+            TweenInfo.new(3.5, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+            {Rotation = 360})
+        spinTween = tw
+        tw:Play()
+    end
+    return back
+end
 
 local Toast = make("TextLabel", {
     Text = "",
@@ -222,6 +258,7 @@ local function modalInput(title, defaultText)
         CornerRadius = 10,
         Parent = ov
     })
+    rainbowBorder(win, 2, 12, false)
     label(win, title, UDim2.new(1, -24, 0, 26), UDim2.new(0, 12, 0, 10), C_WHITE, 15, z + 2)
     local box = make("TextBox", {
         Text = defaultText or "",
@@ -275,6 +312,7 @@ local function modalConfirm(title, msg, okText)
         CornerRadius = 10,
         Parent = ov
     })
+    rainbowBorder(win, 2, 12, false)
     label(win, title, UDim2.new(1, -24, 0, 28), UDim2.new(0, 12, 0, 10), C_ORG, 15, z + 2)
     label(win, msg, UDim2.new(1, -24, 0, 48), UDim2.new(0, 12, 0, 42), C_TXT, 13, z + 2)
     local closed = false
@@ -337,6 +375,7 @@ local Main = make("Frame", {
     CornerRadius = 10,
     Parent = Gui
 })
+local Glow = rainbowBorder(Main, 2, 12, true)
 
 local Title = make("Frame", {
     Size = UDim2.new(1, 0, 0, 34),
@@ -345,7 +384,7 @@ local Title = make("Frame", {
     CornerRadius = 10,
     Parent = Main
 })
-local TitleLbl = label(Title, "⚡ TeleportHub", UDim2.new(1, -128, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 13, 12)
+local TitleLbl = label(Title, "TC坐标传送", UDim2.new(1, -128, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 14, 12)
 local QuitB = button(Title, "关脚本", UDim2.new(0, 40, 0, 30), UDim2.new(1, -118, 0, 2), Color3.fromRGB(150, 45, 45), 9, 12)
 local MinB = button(Title, "—", UDim2.new(0, 32, 0, 30), UDim2.new(1, -74, 0, 2), C_BG3, 16, 12)
 local CloseB = button(Title, "X", UDim2.new(0, 32, 0, 30), UDim2.new(1, -38, 0, 2), C_RED, 15, 12)
@@ -431,12 +470,13 @@ local MoveBar = make("Frame", {
     ZIndex = 12,
     Parent = GPage
 })
-local MoveBtn = button(MoveBar, "🚀 快速移动", UDim2.new(0, 150, 0, 34), UDim2.new(0, 0, 0, 0), C_PURP, 12, 13)
-label(MoveBar, "速度", UDim2.new(0, 30, 1, 0), UDim2.new(0, 152, 0, 0), C_TXT2, 11, 13)
+local MoveBtn = button(MoveBar, "🚀 快速移动", UDim2.new(0, 140, 0, 34), UDim2.new(0, 0, 0, 0), C_PURP, 12, 13)
+label(MoveBar, "速度", UDim2.new(0, 28, 1, 0), UDim2.new(0, 142, 0, 0), C_TXT2, 11, 13)
 local SpeedBox = make("TextBox", {
     Text = tostring(Speed),
-    Size = UDim2.new(0, 72, 0, 30),
-    Position = UDim2.new(0, 184, 0, 2),
+    Size = UDim2.new(0, 84, 0, 30),
+    Position = UDim2.new(0, 172, 0, 2),
+    TextScaled = true,
     BackgroundColor3 = C_BG3,
     TextColor3 = C_WHITE,
     PlaceholderText = "30",
@@ -793,6 +833,7 @@ openManage = function()
         CornerRadius = 10,
         Parent = ov
     })
+    rainbowBorder(win, 2, 12, false)
     label(win, "📁 管理组合", UDim2.new(1, -48, 0, 28), UDim2.new(0, 12, 0, 8), C_WHITE, 15, z + 2)
     local closeBtn = button(win, "X", UDim2.new(0, 30, 0, 28), UDim2.new(1, -38, 0, 8), C_RED, 14, z + 2)
     label(win, "间隔(秒)", UDim2.new(0, 80, 0, 26), UDim2.new(0, 12, 0, 40), C_TXT2, 12, z + 2)
@@ -1061,7 +1102,9 @@ switchTab = function(n)
 end
 
 applyLayout = function()
-    Main.Size = minimized and UDim2.new(0, 280, 0, 34) or UDim2.new(0, 280, 0, 380)
+    local w, h = 280, minimized and 34 or 380
+    Main.Size = UDim2.new(0, w, 0, h)
+    Glow.Size = UDim2.new(0, w + 4, 0, h + 4)
     MinB.Text = minimized and "+" or "—"
     Tabs.Visible = not minimized
     QPanel.Visible = not minimized
@@ -1073,7 +1116,7 @@ applyLayout = function()
     end
 end
 
-makeDrag = function(frame, handle, boundsFrame, movedRef)
+makeDrag = function(frame, handle, boundsFrame, movedRef, border, pad)
     local dragging = false
     local startInput = nil
     local startAbs = nil
@@ -1109,6 +1152,10 @@ makeDrag = function(frame, handle, boundsFrame, movedRef)
         local nx = math.clamp(startAbs.X + d.X, 0, math.max(0, maxX))
         local ny = math.clamp(startAbs.Y + d.Y, 0, math.max(0, maxY))
         frame.Position = UDim2.new(0, nx, 0, ny)
+        if border then
+            local p = pad or 2
+            border.Position = UDim2.new(0, nx - p, 0, ny - p)
+        end
     end)
     UIS.InputEnded:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1 or
@@ -1162,13 +1209,13 @@ MngB.MouseButton1Click:Connect(function() openManage() end)
 MoveBtn.MouseButton1Click:Connect(function() startMove() end)
 SpeedBox.FocusLost:Connect(function()
     local n = tonumber(SpeedBox.Text)
-    if n and n >= 1 and n <= 300 then
+    if n and n == n and n > 0 and n < math.huge then
         Speed = n
         safe(function() LP:SetAttribute(K_SPEED, Speed) end)
-        showToast("🚀 速度 " .. Speed .. " studs/s")
+        showToast("速度 " .. tostring(Speed) .. " studs/s")
     else
         SpeedBox.Text = tostring(Speed)
-        showToast("速度范围 1~300")
+        showToast("速度需填大于 0 的数字")
     end
 end)
 
@@ -1240,14 +1287,16 @@ end)
 
 CloseB.MouseButton1Click:Connect(function()
     Main.Visible = false
+    Glow.Visible = false
     FloatB.Visible = true
 end)
 
 QuitB.MouseButton1Click:Connect(function()
-    local ok = modalConfirm("关闭脚本", "彻底关闭 TeleportHub？\n数据会保留，下次执行自动恢复。", "关闭")
+    local ok = modalConfirm("关闭脚本", "彻底关闭 TC坐标传送？\n数据会保留，下次执行自动恢复。", "关闭")
     if not ok then return end
     if LoopRunning then stopLoop() end
     if MoveRunning then stopMove() end
+    if spinTween then safe(function() spinTween:Cancel() end) end
     safe(function() Gui:Destroy() end)
 end)
 
@@ -1258,11 +1307,12 @@ FloatB.MouseButton1Click:Connect(function()
         return
     end
     Main.Visible = true
+    Glow.Visible = true
     FloatB.Visible = false
 end)
 
-makeDrag(Main, Title)
-makeDrag(Main, TitleLbl)
+makeDrag(Main, Title, nil, nil, Glow, 2)
+makeDrag(Main, TitleLbl, nil, nil, Glow, 2)
 makeDrag(FloatB, FloatB, nil, floatMoved)
 
 local qDrag, qStart, qStartPos, qMoved = false, nil, nil, false
@@ -1325,7 +1375,7 @@ if type(q) == "string" and q ~= "" then QuickGroupId = q end
 local iv = safe(function() return LP:GetAttribute(K_INTERV) end)
 if type(iv) == "number" and iv >= 0.1 then Interval = iv end
 local sp = safe(function() return LP:GetAttribute(K_SPEED) end)
-if type(sp) == "number" and sp >= 1 and sp <= 300 then Speed = sp end
+if type(sp) == "number" and sp == sp and sp > 0 and sp < math.huge then Speed = sp end
 SpeedBox.Text = tostring(Speed)
 
 refreshC()
@@ -1334,4 +1384,4 @@ switchTab(1)
 applyLayout()
 updateQuickUI()
 updateMoveUI()
-showToast("⚡ TeleportHub 已加载")
+showToast("TC坐标传送 已加载")
