@@ -33,6 +33,13 @@ local MoveGroupId = nil
 local minimized = false
 local quickOn = false
 local currentTab = 1
+local Spectating = false
+local SpectateRedirect = true
+local savedCamType, savedCamSubject = nil, nil
+local camPos = Vector3.new(0, 0, 0)
+local camBaseRot = CFrame.new()
+local camYaw, camPitch = 0, 0
+local camMove = {f=false, b=false, l=false, r=false, u=false, d=false}
 
 local C_BG   = Color3.fromRGB(24, 25, 28)
 local C_BG2  = Color3.fromRGB(35, 37, 42)
@@ -45,6 +52,39 @@ local C_PURP = Color3.fromRGB(142, 86, 214)
 local C_TXT  = Color3.fromRGB(240, 242, 248)
 local C_TXT2 = Color3.fromRGB(158, 163, 178)
 local C_WHITE= Color3.fromRGB(255, 255, 255)
+
+local IMG_W, IMG_H, IMG_NPAL = 48, 48, 24
+local IMG_B64 = table.concat({
+    "AAAA1NbXgYODS0pJExMSBAQCBAMCAwMDAwMCAwMBAwMAAgMAAwIBAgICAgIBAgIAAQIBAgEBAQECAQEBAQEAAAEBAAABAAAAAAAAAAAAAAAAAA",
+    "AAAAAAAAAAAAAODg4ODhMTEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABMTEw4JCAkODhMTEw4ODg4AAAAAAAAAAAAAAAAA",
+    "AAAAAAAAAAAAAAAAAAAAAAAOCAkOEw4JCQ4ODhMWEw4ODg4ODgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQkICAUIDg4ODg4OCQ4RDgkJDA",
+    "kODgkJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUFCQgICAUICQkJDg4JCAgJCAkJDg4JDg8KCgoAAAAAAAAAAAAAAAAAAAAAAAAACQUFBQUJCQUJ",
+    "BQUJBgUFCQkICQ4ODhMODg8PDw8JAAAAAAAAAAAAAAAAAAAAAAAJBQkJBQUJCQgFBQgJBQUJCQkJDhMODg4JDg8PDw8JCQAAAAAAAAAAAAAAAA",
+    "AAAAkJCAgJCAkICAkJCQkJCAkICQgJDhMOCAkICQ8PDAkJCQkAAAAAAAAAAAAAAAAACQkICQkJCQkJCQ4OEw4JCQkJCQkICQkJCQkICQkKCQkJ",
+    "Cg8KAAAAAAAAAAAAAAAJCQkJCQ4LCQkJCQ4OExEJCQkJCQkJBgkJCQkJCAkJCQoPDw8PDwAAAAAAAAAAAA4JCQkJDhETDgkJCAkJCQ4JBQkJCQ",
+    "gFBQkJCQkJCQkJCQwPFA8PDwoAAAAAAAAAAA4OCQkODg4TDgkJCQgICAkJBQkICAUJCQUGCAkJCQkJCQ8UFA8UFAsAAAAAAAAACQ4TDg4ODg4O",
+    "DgkJCAkJCQUFCQkJCQgJCQgFBQkJCQkJCQ8UFBQPFA8JAAAAAAAADg4TDgwODg4MDgwJCQkICAUFCQkJCQ4OCQkJCQkJCQkJCQkUFBEPDwoJAA",
+    "AAAAAODg4OCQ4ODgkJCQkICAkOFAgIDhQODhcXDQ0OCQkICQkJCQkUFA8PDwoPDwAAAAAODgwJDg4QDggJCQkJCQkNBRcXEQcTDgURFxcTEQkI",
+    "CQkJCQ8PDw8PDwwPDwAAAAkODg4ODg4OEwkJCQkJBQ4FAwICAgQTEwQCAgMXDA4JCQkJChQPEQ8PDwoUFA8AAAkJDg4OExEOEwkJCQkJCQkNFw",
+    "IBAxcHCBcEAQEFEwgJCQkJChEUFBQPDwkMDw8AAAkODg4RExMTEQkJCAkJCAgFFwIBAxcFCBMIAQEDFwUOCQkPFA8UFBQPCgkJCQ8AAAkODhMW",
+    "ExMRDgkJCQkJCAUFFwIBAxcFBRcDAwEBDQ0ICQkJFA8PFA8KCQoKCQoAEQkJDhMTExMODgkJCAgJCQkFEwIBAxcFDgUDBwIBAxcFCQkJDw8PDw",
+    "kJCgkKCQkPEwkJCQ4OExMRDgkJCAkIBQ4XFwIBAxMFEwMDFwMBAhcFCQkJCQ8PDwkJCgoLCgkPEw4ODg4OExMTDgkJCQgXFxcEBAIBAxcXFwME",
+    "FwQBAQQXBQkKCgkJDwoJCg8PDwoPEwkMDg4JCQ4ODg4OCBcFAwMDAwIBAgMDBAMXBRcCAQIXBQwKCQkJCgkJCQkPDw8PDgkJDgkJCAkJCQkIFw",
+    "QCAgQXFwIBAwQDAgIEFxcEAQEHEQkKCgkJCQkKCQkKDAoPEw4JDg4ICQkICQUTBAECFxcFDQIBAxcXAwQDAwQXAgEDFwUPDwoJCQkKCQkPDwkP",
+    "Ew4ODhMOCQkOCQcXAwEEEwUFFwIBAxMEAxcXBAMDAgECFwgPDw8KCgoKCQkPDwkPEw4ODhMOCQkRDggXAgEDFwUFFwIBAxcDBBMFFxcEBAIBBB",
+    "cIDxEPDw8KCgkPDwkPAA4OCQkJCQkRDggXAwIDEwUIEwICBAcDDREOCAcXFwMBAxcFDw8PFA8JCgkJCQkAAA4TEw4JCQkOEwUXBAIDFwUXFwID",
+    "FwQEFwYODg4FEwQCAgQXCQ8PDw8JCgkJCQkAAAwTExMTEw4ODg4OBgMCBBcTAwIEBAIDDQgODg4IEwQCAgMFDQ8PDwwJCgkJCQkAAAgODg4TEQ",
+    "4ODg4OExcEAwMDAwQFAwMDBBMIDg4TBQMDAwMDFAkPCgkJCQkJCQkAAAAODg4ODg4OCQkOCQgXFwUHFxcSFxcXFw4OExMTExcXFxcXDwkJCQkJ",
+    "DA8KDwAAAAAMDg4MCQ4ODg4ODAkFBRQPBQwUDQgIDg4RFBMTDggFBQYODwkJCQkPDw8PDwAAAAAAEQ8KCg8PDw8PDw8PDAkKDA8PDw8PDw8PDw",
+    "8UCgoJCg8UEQoJCQoPDw8JAAAAAAAADw8JCQ8PDxEPCg8PCQkJCQkJCQoPDw8PCQkKCQkJCQkPDwkJCQwPDw8JAAAAAAAAAAkJCQkPDw8JCQkK",
+    "CQkJCQkJCQkPCQkJCQkJCQkJCQkJCQkJCQkKDwkAAAAAAAAAAAkJCQkPFAoJCQkJCQUGCQkFBQkJCQkJCQYJCQkJCQkJCQkJCQkJCQkAAAAAAA",
+    "AAAAAJCQkJCgkJCQkJCQYJCQkJBQYJCQkJCQkJCQkJCQkJCQkJCgkKCQAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJBQkJCQkJCQkJCQkJCQkJ",
+    "CQwPCgoKAAAAAAAAAAAAAAAAAAkJCQkJCQkJCQkJCQoKDAkJCQkJCgkJCQoMDAoJChEPDw8AAAAAAAAAAAAAAAAAAAAKCQkJCQkJCQkJCQ8PDw",
+    "8KCQkKDw8PDw8PCQoKDxQUDwAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQoPDw8JCQkKDw8PDw8KCQkJDw8PAAAAAAAAAAAAAAAAAAAAAAAA",
+    "AAkJCQkJCQkJCQkJCgkJCQkJCQ8MCQkJCQkJDw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQoJAAAAAAAAAA",
+    "AAAAAAAAAAAAAAAAAAAAAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAkJCQkJCQkJCQkJCQkJ",
+    "CQkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODg4ODg8PDgAAAAAAAAAAAAAAAAAAAAAAAAAA",
+}, "")
 
 local Rainbow = ColorSequence.new({
     ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 95, 95)),
@@ -164,6 +204,106 @@ local Gui = make("ScreenGui", {
     DisplayOrder = 999,
     Parent = PlayerGui
 })
+
+local function b64decode(s)
+    local B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local map = {}
+    for i = 1, #B do map[B:sub(i, i)] = i - 1 end
+    local out, acc, bits = {}, 0, 0
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        if c ~= "=" then
+            local v = map[c]
+            if v then
+                acc = acc * 64 + v
+                bits = bits + 6
+                if bits >= 8 then
+                    bits = bits - 8
+                    local d = 2 ^ bits
+                    out[#out + 1] = string.char(math.floor(acc / d) % 256)
+                    acc = acc % d
+                end
+            end
+        end
+    end
+    return table.concat(out)
+end
+
+local AvatarRaw = nil
+local function avatarRaw()
+    if AvatarRaw then return AvatarRaw end
+    local ok, res = pcall(b64decode, IMG_B64)
+    if ok and type(res) == "string" and #res >= IMG_NPAL * 3 + IMG_W * IMG_H then
+        AvatarRaw = res
+    end
+    return AvatarRaw
+end
+
+local function avatarColor(raw, idx)
+    local o = idx * 3
+    return string.byte(raw, o + 1) or 0,
+        string.byte(raw, o + 2) or 0,
+        string.byte(raw, o + 3) or 0
+end
+
+local function applyAvatar(btn, txtLabel)
+    local raw = avatarRaw()
+    if not raw then return false end
+    local OFF = IMG_NPAL * 3
+    local ok = pcall(function()
+        local AS = game:GetService("AssetService")
+        local ei = AS:CreateEditableImage({Size = Vector2.new(IMG_W, IMG_H)})
+        if not ei then error("editable unavailable") end
+        local buf = buffer.create(IMG_W * IMG_H * 4)
+        for p = 0, IMG_W * IMG_H - 1 do
+            local idx = string.byte(raw, OFF + p + 1) or 0
+            local o = p * 4
+            if idx == 0 then
+                buffer.writeu8(buf, o, 0)
+                buffer.writeu8(buf, o + 1, 0)
+                buffer.writeu8(buf, o + 2, 0)
+                buffer.writeu8(buf, o + 3, 0)
+            else
+                local r, g, b = avatarColor(raw, idx)
+                buffer.writeu8(buf, o, r)
+                buffer.writeu8(buf, o + 1, g)
+                buffer.writeu8(buf, o + 2, b)
+                buffer.writeu8(buf, o + 3, 255)
+            end
+        end
+        ei:WritePixelsBuffer(Vector2.zero, Vector2.new(IMG_W, IMG_H), buf)
+        local content = Content.fromObject(ei)
+        local okSet = pcall(function() btn.ImageContent = content end)
+        if not okSet then pcall(function() btn.Image = content end) end
+    end)
+    if ok then
+        if txtLabel then txtLabel.Visible = false end
+        return true
+    end
+    local drawn = pcall(function()
+        local N = 24
+        local cell = 44 / N
+        for gy = 0, N - 1 do
+            for gx = 0, N - 1 do
+                local sx = math.floor(gx * IMG_W / N)
+                local sy = math.floor(gy * IMG_H / N)
+                local idx = string.byte(raw, OFF + sy * IMG_W + sx + 1) or 0
+                if idx ~= 0 then
+                    local r, g, b = avatarColor(raw, idx)
+                    local f = Instance.new("Frame")
+                    f.BorderSizePixel = 0
+                    f.Size = UDim2.new(0, cell + 0.6, 0, cell + 0.6)
+                    f.Position = UDim2.new(0, gx * cell, 0, gy * cell)
+                    f.BackgroundColor3 = Color3.fromRGB(r, g, b)
+                    f.ZIndex = 22
+                    f.Parent = btn
+                end
+            end
+        end
+    end)
+    if drawn and txtLabel then txtLabel.Visible = false end
+    return drawn
+end
 
 local spinTween = nil
 local function rainbowBorder(target, pad, radius, spin)
@@ -337,6 +477,10 @@ local function modalConfirm(title, msg, okText)
 end
 
 local function tel(x, y, z)
+    if Spectating and SpectateRedirect then
+        camPos = Vector3.new(x, y, z)
+        return true
+    end
     local char = LP.Character
     if not char or not char.PrimaryPart then
         char = safe(function() return LP.CharacterAdded:Wait() end)
@@ -535,19 +679,189 @@ local QToggle = button(QPanel, "💤", UDim2.new(0, 46, 0, 46), UDim2.new(0, 0, 
 local QGo = button(QPanel, "⚡ 快捷传送", UDim2.new(0, 142, 0, 44), UDim2.new(0, 50, 0, 1), C_ORG, 12, 15)
 QGo.Visible = false
 
-local FloatB = make("TextButton", {
-    Text = "开",
+local FloatB = make("ImageButton", {
     Size = UDim2.new(0, 44, 0, 44),
     Position = UDim2.new(0, 12, 0.5, -22),
-    BackgroundColor3 = C_BLUE,
-    TextColor3 = C_WHITE,
-    Font = Enum.Font.GothamBold,
-    TextSize = 20,
+    BackgroundColor3 = C_BG,
+    BackgroundTransparency = 1,
+    ScaleType = Enum.ScaleType.Fit,
     Visible = false,
     ZIndex = 20,
     CornerRadius = 22,
     Parent = Gui
 })
+local FloatTxt = label(FloatB, "开", UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0),
+    C_WHITE, 18, 23, Enum.TextXAlignment.Center)
+local FloatGlow = rainbowBorder(FloatB, 1, 23, false)
+FloatGlow.Visible = false
+applyAvatar(FloatB, FloatTxt)
+
+local SpecBar = make("Frame", {
+    Size = UDim2.new(1, 0, 0, 34),
+    Position = UDim2.new(0, 0, 1, 5),
+    BackgroundColor3 = C_BG2,
+    ZIndex = 14,
+    CornerRadius = 8,
+    Parent = Main
+})
+local SpecBtn = button(SpecBar, "旁观视角", UDim2.new(0, 150, 0, 30), UDim2.new(0, 4, 0, 2), C_BG3, 11, 15)
+local SpecMode = button(SpecBar, "模式:视角", UDim2.new(0, 118, 0, 30), UDim2.new(0, 158, 0, 2), C_BLUE, 10, 15)
+
+local CamPanel = make("Frame", {
+    Size = UDim2.new(0, 196, 0, 214),
+    Position = UDim2.new(1, -206, 0.5, -107),
+    BackgroundColor3 = C_BG,
+    BackgroundTransparency = 0.06,
+    Visible = false,
+    ZIndex = 30,
+    CornerRadius = 10,
+    Parent = Gui
+})
+local CamHdr = make("Frame", {
+    Size = UDim2.new(1, 0, 0, 30),
+    BackgroundColor3 = C_BG2,
+    ZIndex = 31,
+    CornerRadius = 10,
+    Parent = CamPanel
+})
+label(CamHdr, "自由视角", UDim2.new(1, -70, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 13, 32)
+local CamExit = button(CamHdr, "退出", UDim2.new(0, 52, 0, 26), UDim2.new(1, -58, 0, 2), C_RED, 11, 32)
+local LookZone = make("Frame", {
+    Size = UDim2.new(1, -16, 0, 58),
+    Position = UDim2.new(0, 8, 0, 36),
+    BackgroundColor3 = C_BG2,
+    Active = true,
+    ZIndex = 32,
+    CornerRadius = 6,
+    Parent = CamPanel
+})
+label(LookZone, "拖动转向", UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0),
+    C_TXT2, 12, 33, Enum.TextXAlignment.Center)
+
+local function holdBtn(txt, x, y, key)
+    local b = button(CamPanel, txt, UDim2.new(0, 56, 0, 30), UDim2.new(0, x, 0, y), C_BG3, 12, 33)
+    b.MouseButton1Down:Connect(function() camMove[key] = true end)
+    b.MouseButton1Up:Connect(function() camMove[key] = false end)
+    return b
+end
+holdBtn("左", 8, 100, "l")
+holdBtn("前", 70, 100, "f")
+holdBtn("右", 132, 100, "r")
+holdBtn("上", 8, 136, "u")
+holdBtn("后", 70, 136, "b")
+holdBtn("下", 132, 136, "d")
+local CamHint = label(CamPanel, "角色留在原地", UDim2.new(1, -16, 0, 26), UDim2.new(0, 8, 0, 174),
+    C_ORG, 10, 33, Enum.TextXAlignment.Center)
+
+local function currentCam()
+    return safe(function() return workspace.CurrentCamera end)
+end
+
+local function enterSpectate()
+    if Spectating then return end
+    local cam = currentCam()
+    if not cam then showToast("相机不可用") return end
+    savedCamType = cam.CameraType
+    savedCamSubject = cam.CameraSubject
+    local cf = cam.CFrame
+    camPos = cf.Position
+    camBaseRot = cf - cf.Position
+    camYaw, camPitch = 0, 0
+    for k in pairs(camMove) do camMove[k] = false end
+    Spectating = true
+    pcall(function()
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CameraSubject = nil
+    end)
+    CamPanel.Visible = true
+    SpecBtn.Text = "退出旁观"
+    SpecBtn.BackgroundColor3 = C_ORG
+    showToast("旁观已开 · 角色留原地；怕晃点『模式』切到角色")
+end
+
+local function exitSpectate()
+    if not Spectating then return end
+    Spectating = false
+    for k in pairs(camMove) do camMove[k] = false end
+    CamPanel.Visible = false
+    SpecBtn.Text = "旁观视角"
+    SpecBtn.BackgroundColor3 = C_BG3
+    local cam = currentCam()
+    if cam then
+        pcall(function()
+            cam.CameraType = savedCamType or Enum.CameraType.Custom
+            cam.CameraSubject = savedCamSubject
+        end)
+        local ch = LP.Character
+        local hum = ch and ch:FindFirstChildOfClass("Humanoid") or nil
+        if hum then pcall(function() cam.CameraSubject = hum end) end
+    end
+    showToast("视角已回到角色")
+end
+
+local RunService = safe(function() return game:GetService("RunService") end)
+if RunService then
+    pcall(function()
+        RunService.RenderStepped:Connect(function(dt)
+            if not Spectating then return end
+            local cam = workspace.CurrentCamera
+            if not cam then return end
+            pcall(function() cam.CameraType = Enum.CameraType.Scriptable end)
+            dt = math.min(tonumber(dt) or 0.03, 0.1)
+            local rot = CFrame.Angles(camPitch, camYaw, 0)
+            local cf = CFrame.new(camPos) * camBaseRot * rot
+            local f, r = cf.LookVector, cf.RightVector
+            local v = Vector3.new(0, 0, 0)
+            if camMove.f then v = v + f end
+            if camMove.b then v = v - f end
+            if camMove.r then v = v + r end
+            if camMove.l then v = v - r end
+            if camMove.u then v = v + Vector3.new(0, 1, 0) end
+            if camMove.d then v = v - Vector3.new(0, 1, 0) end
+            if v.Magnitude > 0 then
+                camPos = camPos + v.Unit * (Speed * dt)
+            end
+            cam.CFrame = CFrame.new(camPos) * camBaseRot * rot
+        end)
+    end)
+end
+
+SpecBtn.MouseButton1Click:Connect(function()
+    if Spectating then exitSpectate() else enterSpectate() end
+end)
+SpecMode.MouseButton1Click:Connect(function()
+    SpectateRedirect = not SpectateRedirect
+    SpecMode.Text = SpectateRedirect and "模式:视角" or "模式:角色"
+    SpecMode.BackgroundColor3 = SpectateRedirect and C_BLUE or C_PURP
+    CamHint.Text = SpectateRedirect and "角色留在原地" or "视角已脱离角色"
+    showToast(SpectateRedirect and "角色不动，传送/移动作用于视角" or "视角不晃，传送/移动作用于角色")
+end)
+CamExit.MouseButton1Click:Connect(exitSpectate)
+
+local lookDrag, lookStart = false, nil
+LookZone.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or
+        i.UserInputType == Enum.UserInputType.Touch then
+        lookDrag = true
+        lookStart = i.Position
+    end
+end)
+UIS.InputChanged:Connect(function(i)
+    if not lookDrag or not lookStart then return end
+    if i.UserInputType ~= Enum.UserInputType.MouseMovement and
+        i.UserInputType ~= Enum.UserInputType.Touch then return end
+    local d = i.Position - lookStart
+    lookStart = i.Position
+    camYaw = camYaw - d.X * 0.006
+    camPitch = math.clamp(camPitch - d.Y * 0.006, -1.45, 1.45)
+end)
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or
+        i.UserInputType == Enum.UserInputType.Touch then
+        lookDrag = false
+        for k in pairs(camMove) do camMove[k] = false end
+    end
+end)
 
 stopLoop = function()
     LoopRunning = false
@@ -605,7 +919,7 @@ startMove = function()
     MoveThread = task.spawn(function()
         local n = #pts
         local idx = 1
-        local cur = getPos() or pts[1]
+        local cur = (Spectating and SpectateRedirect) and camPos or (getPos() or pts[1])
         local rot = CFrame.new()
         local ch0 = LP.Character
         local r0 = ch0 and (ch0:FindFirstChild("HumanoidRootPart") or ch0.PrimaryPart)
@@ -618,7 +932,8 @@ startMove = function()
             if not MoveRunning then break end
             dt = math.min(tonumber(dt) or 0.03, 0.1)
             local ch = LP.Character
-            if not ch or not ch.PrimaryPart then break end
+            local toCam = Spectating and SpectateRedirect
+            if not toCam and (not ch or not ch.PrimaryPart) then break end
             local target = pts[idx]
             local d = target - cur
             local dist = d.Magnitude
@@ -629,7 +944,11 @@ startMove = function()
             else
                 cur = cur + d.Unit * step
             end
-            pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
+            if toCam then
+                camPos = cur
+            else
+                pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
+            end
         end
         if MoveRunning then stopMove() end
     end)
@@ -1175,7 +1494,11 @@ SaveB.MouseButton1Click:Connect(function()
     saveAttr(K_COORDS, Coords)
     trySaveDS(K_COORDS, Coords)
     refreshC()
-    showToast("✅ 已保存")
+    if Spectating then
+        showToast("已保存角色本体位置（非视角）")
+    else
+        showToast("✅ 已保存")
+    end
 end)
 
 AllB.MouseButton1Click:Connect(function()
@@ -1289,13 +1612,15 @@ CloseB.MouseButton1Click:Connect(function()
     Main.Visible = false
     Glow.Visible = false
     FloatB.Visible = true
+    FloatGlow.Visible = true
 end)
 
 QuitB.MouseButton1Click:Connect(function()
-    local ok = modalConfirm("关闭脚本", "彻底关闭 TC坐标传送？\n数据会保留，下次执行自动恢复。", "关闭")
+    local ok = modalConfirm("关闭脚本", "彻底关闭 TC坐标传送？\n会恢复角色视角，数据保留。", "关闭")
     if not ok then return end
     if LoopRunning then stopLoop() end
     if MoveRunning then stopMove() end
+    if Spectating then exitSpectate() end
     if spinTween then safe(function() spinTween:Cancel() end) end
     safe(function() Gui:Destroy() end)
 end)
@@ -1309,11 +1634,13 @@ FloatB.MouseButton1Click:Connect(function()
     Main.Visible = true
     Glow.Visible = true
     FloatB.Visible = false
+    FloatGlow.Visible = false
 end)
 
 makeDrag(Main, Title, nil, nil, Glow, 2)
 makeDrag(Main, TitleLbl, nil, nil, Glow, 2)
-makeDrag(FloatB, FloatB, nil, floatMoved)
+makeDrag(FloatB, FloatB, nil, floatMoved, FloatGlow, 1)
+makeDrag(CamPanel, CamHdr)
 
 local qDrag, qStart, qStartPos, qMoved = false, nil, nil, false
 QToggle.InputBegan:Connect(function(i)
