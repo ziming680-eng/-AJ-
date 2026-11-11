@@ -39,7 +39,11 @@ local savedCamType, savedCamSubject = nil, nil
 local camPos = Vector3.new(0, 0, 0)
 local camBaseRot = CFrame.new()
 local camYaw, camPitch = 0, 0
-local camMove = {f=false, b=false, l=false, r=false, u=false, d=false}
+local camStickVec = Vector2.new(0, 0)
+local camStickInput = nil
+local camLookInput = nil
+local camLookStart = nil
+local spectateCharCF = nil
 
 local C_BG   = Color3.fromRGB(24, 25, 28)
 local C_BG2  = Color3.fromRGB(35, 37, 42)
@@ -708,50 +712,49 @@ local SpecBtn = button(SpecBar, "旁观视角", UDim2.new(0, 150, 0, 30), UDim2.
 local SpecMode = button(SpecBar, "模式:视角", UDim2.new(0, 118, 0, 30), UDim2.new(0, 158, 0, 2), C_BLUE, 10, 15)
 
 local CamPanel = make("Frame", {
-    Size = UDim2.new(0, 196, 0, 214),
-    Position = UDim2.new(1, -206, 0.5, -107),
+    Size = UDim2.new(0, 168, 0, 62),
+    Position = UDim2.new(1, -178, 0, 12),
     BackgroundColor3 = C_BG,
-    BackgroundTransparency = 0.06,
+    BackgroundTransparency = 0.12,
     Visible = false,
     ZIndex = 30,
     CornerRadius = 10,
     Parent = Gui
 })
 local CamHdr = make("Frame", {
-    Size = UDim2.new(1, 0, 0, 30),
+    Size = UDim2.new(1, 0, 0, 28),
     BackgroundColor3 = C_BG2,
     ZIndex = 31,
     CornerRadius = 10,
     Parent = CamPanel
 })
-label(CamHdr, "自由视角", UDim2.new(1, -70, 1, 0), UDim2.new(0, 10, 0, 0), C_WHITE, 13, 32)
-local CamExit = button(CamHdr, "退出", UDim2.new(0, 52, 0, 26), UDim2.new(1, -58, 0, 2), C_RED, 11, 32)
-local LookZone = make("Frame", {
-    Size = UDim2.new(1, -16, 0, 58),
-    Position = UDim2.new(0, 8, 0, 36),
-    BackgroundColor3 = C_BG2,
-    Active = true,
-    ZIndex = 32,
-    CornerRadius = 6,
-    Parent = CamPanel
-})
-label(LookZone, "拖动转向", UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0),
-    C_TXT2, 12, 33, Enum.TextXAlignment.Center)
+label(CamHdr, "自由视角", UDim2.new(1, -62, 1, 0), UDim2.new(0, 9, 0, 0), C_WHITE, 12, 32)
+local CamExit = button(CamHdr, "退出", UDim2.new(0, 48, 0, 24), UDim2.new(1, -54, 0, 2), C_RED, 11, 32)
+local CamHint = label(CamPanel, "右滑转视角 · 左摇杆移动", UDim2.new(1, -12, 0, 28),
+    UDim2.new(0, 6, 0, 32), C_ORG, 10, 32, Enum.TextXAlignment.Center)
 
-local function holdBtn(txt, x, y, key)
-    local b = button(CamPanel, txt, UDim2.new(0, 56, 0, 30), UDim2.new(0, x, 0, y), C_BG3, 12, 33)
-    b.MouseButton1Down:Connect(function() camMove[key] = true end)
-    b.MouseButton1Up:Connect(function() camMove[key] = false end)
-    return b
-end
-holdBtn("左", 8, 100, "l")
-holdBtn("前", 70, 100, "f")
-holdBtn("右", 132, 100, "r")
-holdBtn("上", 8, 136, "u")
-holdBtn("后", 70, 136, "b")
-holdBtn("下", 132, 136, "d")
-local CamHint = label(CamPanel, "角色留在原地", UDim2.new(1, -16, 0, 26), UDim2.new(0, 8, 0, 174),
-    C_ORG, 10, 33, Enum.TextXAlignment.Center)
+local CamStick = make("Frame", {
+    Size = UDim2.new(0, 116, 0, 116),
+    Position = UDim2.new(0, 16, 1, -136),
+    BackgroundColor3 = C_BG2,
+    BackgroundTransparency = 0.45,
+    Active = true,
+    Visible = false,
+    ZIndex = 25,
+    CornerRadius = 58,
+    Parent = Gui
+})
+local CamKnob = make("Frame", {
+    Size = UDim2.new(0, 48, 0, 48),
+    Position = UDim2.new(0.5, -24, 0.5, -24),
+    BackgroundColor3 = C_WHITE,
+    BackgroundTransparency = 0.18,
+    ZIndex = 26,
+    CornerRadius = 24,
+    Parent = CamStick
+})
+label(CamStick, "移动", UDim2.new(1, 0, 0, 18), UDim2.new(0, 0, 0.5, 22),
+    C_TXT2, 10, 26, Enum.TextXAlignment.Center)
 
 local function currentCam()
     return safe(function() return workspace.CurrentCamera end)
@@ -767,23 +770,33 @@ local function enterSpectate()
     camPos = cf.Position
     camBaseRot = cf - cf.Position
     camYaw, camPitch = 0, 0
-    for k in pairs(camMove) do camMove[k] = false end
+    camStickVec = Vector2.new(0, 0)
+    camStickInput, camLookInput, camLookStart = nil, nil, nil
+    CamKnob.Position = UDim2.new(0.5, -24, 0.5, -24)
+    local ch = LP.Character
+    local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+    spectateCharCF = root and root.CFrame or nil
     Spectating = true
     pcall(function()
         cam.CameraType = Enum.CameraType.Scriptable
         cam.CameraSubject = nil
     end)
     CamPanel.Visible = true
+    CamStick.Visible = true
     SpecBtn.Text = "退出旁观"
     SpecBtn.BackgroundColor3 = C_ORG
-    showToast("旁观已开 · 角色留原地；怕晃点『模式』切到角色")
+    showToast("旁观已开 · 右滑转视角 / 左下摇杆移动")
 end
 
 local function exitSpectate()
     if not Spectating then return end
     Spectating = false
-    for k in pairs(camMove) do camMove[k] = false end
+    camStickVec = Vector2.new(0, 0)
+    camStickInput, camLookInput, camLookStart = nil, nil, nil
+    CamKnob.Position = UDim2.new(0.5, -24, 0.5, -24)
     CamPanel.Visible = false
+    CamStick.Visible = false
+    spectateCharCF = nil
     SpecBtn.Text = "旁观视角"
     SpecBtn.BackgroundColor3 = C_BG3
     local cam = currentCam()
@@ -810,21 +823,128 @@ if RunService then
             dt = math.min(tonumber(dt) or 0.03, 0.1)
             local rot = CFrame.Angles(camPitch, camYaw, 0)
             local cf = CFrame.new(camPos) * camBaseRot * rot
-            local f, r = cf.LookVector, cf.RightVector
-            local v = Vector3.new(0, 0, 0)
-            if camMove.f then v = v + f end
-            if camMove.b then v = v - f end
-            if camMove.r then v = v + r end
-            if camMove.l then v = v - r end
-            if camMove.u then v = v + Vector3.new(0, 1, 0) end
-            if camMove.d then v = v - Vector3.new(0, 1, 0) end
-            if v.Magnitude > 0 then
-                camPos = camPos + v.Unit * (Speed * dt)
+            local _, yawOnly = cf:ToEulerAnglesYXZ()
+            local flat = CFrame.Angles(0, yawOnly, 0)
+            local f = flat.LookVector
+            local r = flat.RightVector
+            local v = f * (-camStickVec.Y) + r * camStickVec.X
+            local step = Vector3.zero
+            if v.Magnitude > 0.01 then
+                step = v.Unit * (Speed * dt) * math.min(1, v.Magnitude)
+            end
+            local ch = LP.Character
+            local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+            if SpectateRedirect then
+                camPos = camPos + step
+                if root and spectateCharCF then
+                    local drift = (root.CFrame.Position - spectateCharCF.Position).Magnitude
+                    if drift > 0.4 then
+                        pcall(function()
+                            root.CFrame = spectateCharCF
+                            root.AssemblyLinearVelocity = Vector3.zero
+                        end)
+                    end
+                end
+            elseif root and step.Magnitude > 0 then
+                pcall(function() root.CFrame = root.CFrame + step end)
             end
             cam.CFrame = CFrame.new(camPos) * camBaseRot * rot
         end)
     end)
 end
+
+-- 左下摇杆：按住拖动，方向映射到前进/左右
+CamStick.InputBegan:Connect(function(i)
+    if not Spectating or camStickInput then return end
+    if i.UserInputType == Enum.UserInputType.MouseButton1 or
+        i.UserInputType == Enum.UserInputType.Touch then
+        camStickInput = i
+        local c = CamStick.AbsolutePosition + CamStick.AbsoluteSize / 2
+        local d = Vector2.new(i.Position.X - c.X, i.Position.Y - c.Y)
+        local m = math.min(1, d.Magnitude / 42)
+        camStickVec = d.Magnitude > 0 and d.Unit * m or Vector2.new(0, 0)
+        CamKnob.Position = UDim2.new(0.5, -24 + camStickVec.X * 34,
+            0.5, -24 + camStickVec.Y * 34)
+    end
+end)
+UIS.InputChanged:Connect(function(i)
+    if not camStickInput or not Spectating then return end
+    local touchSame = camStickInput.UserInputType == Enum.UserInputType.Touch and i == camStickInput
+    local mouseMove = i.UserInputType == Enum.UserInputType.MouseMovement and
+        camStickInput.UserInputType ~= Enum.UserInputType.Touch
+    if not (touchSame or mouseMove) then return end
+    local c = CamStick.AbsolutePosition + CamStick.AbsoluteSize / 2
+    local d = Vector2.new(i.Position.X - c.X, i.Position.Y - c.Y)
+    local m = math.min(1, d.Magnitude / 42)
+    camStickVec = d.Magnitude > 0 and d.Unit * m or Vector2.new(0, 0)
+    CamKnob.Position = UDim2.new(0.5, -24 + camStickVec.X * 34,
+        0.5, -24 + camStickVec.Y * 34)
+end)
+
+-- 屏幕空白处直接滑动转视角（点在 UI 上时不抢）
+local function inStick(pos)
+    local a = CamStick.AbsolutePosition
+    local s = CamStick.AbsoluteSize
+    return pos.X >= a.X - 8 and pos.X <= a.X + s.X + 8 and
+        pos.Y >= a.Y - 8 and pos.Y <= a.Y + s.Y + 8
+end
+
+local function overMyUI(pos)
+    local ok, objs = pcall(function()
+        return UIS:GetGuiObjectsAtPosition(Vector2.new(pos.X, pos.Y))
+    end)
+    if not ok or type(objs) ~= "table" then
+        local vp = viewport()
+        return pos.X < vp.X * 0.45
+    end
+    for _, o in ipairs(objs) do
+        if o and o:IsA("GuiObject") and o.Visible and o.ZIndex >= 10 then
+            local okMine, isMine = pcall(function() return o:IsDescendantOf(Gui) end)
+            if okMine and isMine then return true end
+        end
+    end
+    return false
+end
+
+local function sameInput(a, b)
+    if a == b then return true end
+    if a and b and a.UserInputType == b.UserInputType and
+        a.UserInputType ~= Enum.UserInputType.Touch then return true end
+    return false
+end
+
+UIS.InputBegan:Connect(function(i)
+    if not Spectating or camStickInput or camLookInput then return end
+    if i.UserInputType ~= Enum.UserInputType.MouseButton1 and
+        i.UserInputType ~= Enum.UserInputType.Touch then return end
+    if CamStick.Visible and inStick(i.Position) then return end
+    if overMyUI(i.Position) then return end
+    camLookInput = i
+    camLookStart = i.Position
+end)
+UIS.InputChanged:Connect(function(i)
+    if not camLookInput or not camLookStart or not Spectating then return end
+    local touchSame = camLookInput.UserInputType == Enum.UserInputType.Touch and i == camLookInput
+    local mouseMove = i.UserInputType == Enum.UserInputType.MouseMovement and
+        camLookInput.UserInputType ~= Enum.UserInputType.Touch
+    if not (touchSame or mouseMove) then return end
+    local d = i.Position - camLookStart
+    camLookStart = i.Position
+    camYaw = camYaw - d.X * 0.006
+    camPitch = math.clamp(camPitch - d.Y * 0.006, -1.45, 1.45)
+end)
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType ~= Enum.UserInputType.MouseButton1 and
+        i.UserInputType ~= Enum.UserInputType.Touch then return end
+    if camLookInput and sameInput(i, camLookInput) then
+        camLookInput, camLookStart = nil, nil
+    end
+    if camStickInput and sameInput(i, camStickInput) then
+        camStickInput = nil
+        camStickVec = Vector2.new(0, 0)
+        CamKnob.Position = UDim2.new(0.5, -24, 0.5, -24)
+    end
+end)
 
 SpecBtn.MouseButton1Click:Connect(function()
     if Spectating then exitSpectate() else enterSpectate() end
@@ -833,35 +953,10 @@ SpecMode.MouseButton1Click:Connect(function()
     SpectateRedirect = not SpectateRedirect
     SpecMode.Text = SpectateRedirect and "模式:视角" or "模式:角色"
     SpecMode.BackgroundColor3 = SpectateRedirect and C_BLUE or C_PURP
-    CamHint.Text = SpectateRedirect and "角色留在原地" or "视角已脱离角色"
-    showToast(SpectateRedirect and "角色不动，传送/移动作用于视角" or "视角不晃，传送/移动作用于角色")
+    CamHint.Text = SpectateRedirect and "角色留在原地" or "摇杆移动角色"
+    showToast(SpectateRedirect and "角色不动，摇杆飞视角" or "摇杆移动角色，视角独立")
 end)
 CamExit.MouseButton1Click:Connect(exitSpectate)
-
-local lookDrag, lookStart = false, nil
-LookZone.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or
-        i.UserInputType == Enum.UserInputType.Touch then
-        lookDrag = true
-        lookStart = i.Position
-    end
-end)
-UIS.InputChanged:Connect(function(i)
-    if not lookDrag or not lookStart then return end
-    if i.UserInputType ~= Enum.UserInputType.MouseMovement and
-        i.UserInputType ~= Enum.UserInputType.Touch then return end
-    local d = i.Position - lookStart
-    lookStart = i.Position
-    camYaw = camYaw - d.X * 0.006
-    camPitch = math.clamp(camPitch - d.Y * 0.006, -1.45, 1.45)
-end)
-UIS.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or
-        i.UserInputType == Enum.UserInputType.Touch then
-        lookDrag = false
-        for k in pairs(camMove) do camMove[k] = false end
-    end
-end)
 
 stopLoop = function()
     LoopRunning = false
