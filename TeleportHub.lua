@@ -1,4 +1,5 @@
 -- TC坐标传送 · Delta 执行器专用（纯客户端 / 手机竖屏）
+local function TCA()
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
@@ -1905,6 +1906,7 @@ local function snapshot()
     }
 end
 
+local function TCB()
 local function applySnapshot(d)
     if type(d) ~= "table" then return false end
     if type(d.coords) == "table" then Coords = deepCopy(d.coords) end
@@ -2307,3 +2309,8 @@ applyLayout()
 updateQuickUI()
 updateMoveUI()
 showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
+
+end
+TCB()
+end
+TCA()
