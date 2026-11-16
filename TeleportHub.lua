@@ -17,6 +17,10 @@ local K_GROUPS = "TPH_groups_v1"
 local K_QUICK  = "TPH_quickGroupId"
 local K_INTERV = "TPH_interval_v1"
 local K_SPEED  = "TPH_speed_v1"
+local K_CAMSPEED = "TPH_camSpeed_v1"
+local K_GHOST = "TPH_ghost_v1"
+local K_CONFIGS = "TPH_configs_v1"
+local K_ACTIVE = "TPH_activeConfig"
 
 local Coords = {}
 local Groups = {}
@@ -33,6 +37,15 @@ local MoveGroupId = nil
 local minimized = false
 local quickOn = false
 local currentTab = 1
+local SpectateSpeed = 50
+local GhostOn = false
+local GhostHz = 30
+local GhostGap = 3
+local GhostAnchor = nil
+local GhostRot = CFrame.new()
+local GhostTick = 0
+local Configs = {}
+local ActiveConfig = nil
 local Spectating = false
 local SpectateFreeze = false
 local savedCamType, savedCamSubject = nil, nil
@@ -577,7 +590,7 @@ local SPage = make("ScrollingFrame", {
     Position = UDim2.new(0, 0, 0, 66),
     BackgroundTransparency = 1,
     ScrollBarThickness = 4,
-    CanvasSize = UDim2.new(0, 0, 0, 340),
+    CanvasSize = UDim2.new(0, 0, 0, 470),
     ZIndex = 11,
     Visible = false,
     Parent = Main
@@ -630,9 +643,33 @@ local SpeedBox = make("TextBox", {
     ZIndex = 13,
     Parent = MoveBar
 })
+local GhostBar = make("Frame", {
+    Size = UDim2.new(1, -20, 0, 34),
+    Position = UDim2.new(0, 10, 0, 126),
+    BackgroundTransparency = 1,
+    ZIndex = 12,
+    Parent = GPage
+})
+local GhostBtn = button(GhostBar, "👻 分身残影", UDim2.new(0, 96, 0, 34), UDim2.new(0, 0, 0, 0), C_BG3, 11, 13)
+label(GhostBar, "Hz", UDim2.new(0, 18, 1, 0), UDim2.new(0, 98, 0, 0), C_TXT2, 10, 13)
+local GhostHzBox = make("TextBox", {
+    Text = tostring(GhostHz), Size = UDim2.new(0, 52, 0, 30),
+    Position = UDim2.new(0, 116, 0, 2), TextScaled = true,
+    BackgroundColor3 = C_BG3, TextColor3 = C_WHITE, PlaceholderText = "30",
+    PlaceholderColor3 = C_TXT2, Font = Enum.Font.GothamBold, TextSize = 11,
+    ClearTextOnFocus = false, ZIndex = 13, Parent = GhostBar
+})
+label(GhostBar, "距", UDim2.new(0, 18, 1, 0), UDim2.new(0, 170, 0, 0), C_TXT2, 10, 13)
+local GhostGapBox = make("TextBox", {
+    Text = tostring(GhostGap), Size = UDim2.new(0, 52, 0, 30),
+    Position = UDim2.new(0, 188, 0, 2), TextScaled = true,
+    BackgroundColor3 = C_BG3, TextColor3 = C_WHITE, PlaceholderText = "3",
+    PlaceholderColor3 = C_TXT2, Font = Enum.Font.GothamBold, TextSize = 11,
+    ClearTextOnFocus = false, ZIndex = 13, Parent = GhostBar
+})
 local GList = make("Frame", {
     Size = UDim2.new(1, -20, 0, 0),
-    Position = UDim2.new(0, 10, 0, 126),
+    Position = UDim2.new(0, 10, 0, 164),
     BackgroundTransparency = 1,
     ZIndex = 12,
     Parent = GPage
@@ -665,6 +702,16 @@ local LoadB = button(SPage, "🔄 从 DataStore 加载", UDim2.new(1, -20, 0, 32
 local SavB  = button(SPage, "💾 手动保存", UDim2.new(1, -20, 0, 32), UDim2.new(0, 10, 0, 180), C_GREEN, 13, 12)
 local JsnB  = button(SPage, "📤 导出 JSON", UDim2.new(1, -20, 0, 32), UDim2.new(0, 10, 0, 218), C_ORG, 13, 12)
 local ClrB  = button(SPage, "🗑 清空所有数据", UDim2.new(1, -20, 0, 32), UDim2.new(0, 10, 0, 256), C_RED, 13, 12)
+label(SPage, "— 配置槽 (存本地 Attributes) —", UDim2.new(1, -20, 0, 22),
+    UDim2.new(0, 10, 0, 296), C_ORG, 10, 12, Enum.TextXAlignment.Center)
+local CfgNow = label(SPage, "当前配置: 无", UDim2.new(1, -20, 0, 22),
+    UDim2.new(0, 10, 0, 318), C_TXT2, 11, 12)
+local CfgSave = button(SPage, "💾 保存配置", UDim2.new(0, 125, 0, 32), UDim2.new(0, 10, 0, 346), C_GREEN, 11, 12)
+local CfgLoad = button(SPage, "📂 加载配置", UDim2.new(0, 125, 0, 32), UDim2.new(0, 145, 0, 346), C_BLUE, 11, 12)
+local CfgPick = button(SPage, "✅ 选择配置", UDim2.new(0, 125, 0, 32), UDim2.new(0, 10, 0, 384), C_PURP, 11, 12)
+local CfgDel  = button(SPage, "🗑 删除配置", UDim2.new(0, 125, 0, 32), UDim2.new(0, 145, 0, 384), C_RED, 11, 12)
+label(SPage, "槽位内容: 坐标/组合/快捷/间隔/速度", UDim2.new(1, -20, 0, 20),
+    UDim2.new(0, 10, 0, 424), C_TXT2, 10, 12, Enum.TextXAlignment.Center)
 
 local QPanel = make("Frame", {
     Size = UDim2.new(0, 196, 0, 46),
@@ -707,7 +754,7 @@ local SpecBtn = button(SpecBar, "旁观视角", UDim2.new(0, 150, 0, 30), UDim2.
 local SpecFreeze = button(SpecBar, "角色定身 ✕", UDim2.new(0, 118, 0, 30), UDim2.new(0, 158, 0, 2), C_BG3, 10, 15)
 
 local CamPanel = make("Frame", {
-    Size = UDim2.new(0, 168, 0, 62),
+    Size = UDim2.new(0, 168, 0, 96),
     Position = UDim2.new(1, -178, 0, 12),
     BackgroundColor3 = C_BG,
     BackgroundTransparency = 0.12,
@@ -725,8 +772,22 @@ local CamHdr = make("Frame", {
 })
 label(CamHdr, "自由视角", UDim2.new(1, -62, 1, 0), UDim2.new(0, 9, 0, 0), C_WHITE, 12, 32)
 local CamExit = button(CamHdr, "退出", UDim2.new(0, 48, 0, 24), UDim2.new(1, -54, 0, 2), C_RED, 11, 32)
-local CamHint = label(CamPanel, "滑屏转视角 · 摇杆飞相机 · 镜头不跟随", UDim2.new(1, -12, 0, 28),
-    UDim2.new(0, 6, 0, 32), C_ORG, 9, 32, Enum.TextXAlignment.Center)
+label(CamPanel, "旁观速度", UDim2.new(0, 62, 0, 28), UDim2.new(0, 8, 0, 32), C_TXT2, 10, 32)
+local CamSpeedBox = make("TextBox", {
+    Text = tostring(SpectateSpeed),
+    Size = UDim2.new(0, 84, 0, 26),
+    Position = UDim2.new(0, 74, 0, 33),
+    BackgroundColor3 = C_BG3,
+    TextColor3 = C_WHITE,
+    Font = Enum.Font.GothamBold,
+    TextSize = 11,
+    TextScaled = true,
+    ClearTextOnFocus = false,
+    ZIndex = 32,
+    Parent = CamPanel
+})
+local CamHint = label(CamPanel, "滑屏转视角 · 摇杆飞相机 · 镜头不跟随", UDim2.new(1, -12, 0, 26),
+    UDim2.new(0, 6, 0, 64), C_ORG, 9, 32, Enum.TextXAlignment.Center)
 
 local CamStick = make("Frame", {
     Size = UDim2.new(0, 116, 0, 116),
@@ -814,13 +875,14 @@ local function spectateStep(dt)
     if not Spectating then return end
     local cam = workspace.CurrentCamera
     if not cam then return end
-    dt = math.min(tonumber(dt) or 0.03, 0.1)
+    dt = tonumber(dt) or 0.03
+    if dt <= 0 then dt = 0.03 end
     local UP = Vector3.new(0, 1, 0)
     local dir = (CFrame.Angles(0, camYaw, 0) * CFrame.Angles(camPitch, 0, 0)).LookVector
     local cf0 = CFrame.lookAt(camPos, camPos + dir, UP)
     local v = cf0.LookVector * (-camStickVec.Y) + cf0.RightVector * camStickVec.X
     if v.Magnitude > 0.01 then
-        camPos = camPos + v.Unit * (Speed * dt) * math.min(1, v.Magnitude)
+        camPos = camPos + v.Unit * (SpectateSpeed * dt) * math.min(1, v.Magnitude)
     end
     if SpectateFreeze and spectateCharCF then
         local ch = LP.Character
@@ -848,6 +910,69 @@ if RunService then
     end
 end
 
+local function stopGhost()
+    GhostOn = false
+    GhostAnchor = nil
+    GhostBtn.Text = "👻 分身残影"
+    GhostBtn.BackgroundColor3 = C_BG3
+end
+
+local function startGhost()
+    if GhostOn then
+        stopGhost()
+        showToast("分身已关闭")
+        return
+    end
+    local ch = LP.Character or safe(function() return LP.CharacterAdded:Wait() end)
+    local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+    if not root then showToast("角色未就绪") return end
+    if MoveRunning then stopMove() end
+    if LoopRunning then stopLoop() end
+    if SpectateFreeze then
+        SpectateFreeze = false
+        SpecFreeze.Text = "角色定身 ✕"
+        SpecFreeze.BackgroundColor3 = C_BG3
+        CamHint.Text = "滑屏转视角 · 摇杆飞相机 · 镜头不跟随"
+    end
+    GhostAnchor = root.CFrame.Position
+    GhostRot = root.CFrame - root.CFrame.Position
+    GhostTick = 0
+    GhostOn = true
+    GhostBtn.Text = "■ 停止分身"
+    GhostBtn.BackgroundColor3 = C_ORG
+    showToast("👻 分身开启 · 3点抖动 " .. tostring(GhostHz) .. "Hz / 间距" .. tostring(GhostGap))
+end
+
+local function ghostStep(dt)
+    if not GhostOn or not GhostAnchor then return end
+    local ch = LP.Character
+    if not ch or not ch.PrimaryPart then return end
+    local root = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
+    if not root then return end
+    dt = tonumber(dt) or 0.03
+    if dt <= 0 then dt = 0.03 end
+    local hum = ch:FindFirstChildOfClass("Humanoid")
+    local md = hum and hum.MoveDirection or Vector3.zero
+    if md.Magnitude > 0.01 then
+        local ws = (hum and hum.WalkSpeed) or 16
+        GhostAnchor = GhostAnchor + md * ws * dt
+        pcall(function()
+            GhostRot = CFrame.lookAt(Vector3.zero, md, Vector3.new(0, 1, 0)).Rotation
+        end)
+    end
+    GhostTick = GhostTick + dt * GhostHz
+    local phase = math.floor(GhostTick) % 3
+    local back = -GhostRot.LookVector
+    local target = GhostAnchor + back * (GhostGap * phase)
+    pcall(function()
+        ch:PivotTo(CFrame.new(target) * GhostRot)
+        root.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+if RunService then
+    pcall(function() RunService.Heartbeat:Connect(ghostStep) end)
+end
+
 -- 左下摇杆：按住拖动，方向映射到前进/左右
 CamStick.InputBegan:Connect(function(i)
     if not Spectating or camStickInput then return end
@@ -862,20 +987,6 @@ CamStick.InputBegan:Connect(function(i)
             0.5, -24 + camStickVec.Y * 34)
     end
 end)
-UIS.InputChanged:Connect(function(i)
-    if not camStickInput or not Spectating then return end
-    local touchSame = camStickInput.UserInputType == Enum.UserInputType.Touch and i == camStickInput
-    local mouseMove = i.UserInputType == Enum.UserInputType.MouseMovement and
-        camStickInput.UserInputType ~= Enum.UserInputType.Touch
-    if not (touchSame or mouseMove) then return end
-    local c = CamStick.AbsolutePosition + CamStick.AbsoluteSize / 2
-    local d = Vector2.new(i.Position.X - c.X, i.Position.Y - c.Y)
-    local m = math.min(1, d.Magnitude / 42)
-    camStickVec = d.Magnitude > 0 and d.Unit * m or Vector2.new(0, 0)
-    CamKnob.Position = UDim2.new(0.5, -24 + camStickVec.X * 34,
-        0.5, -24 + camStickVec.Y * 34)
-end)
-
 -- 屏幕空白处直接滑动转视角（点在 UI 上时不抢）
 local function inStick(pos)
     local a = CamStick.AbsolutePosition
@@ -884,13 +995,22 @@ local function inStick(pos)
         pos.Y >= a.Y - 8 and pos.Y <= a.Y + s.Y + 8
 end
 
+local function inRect(pos, obj, pad)
+    local a, s = obj.AbsolutePosition, obj.AbsoluteSize
+    pad = pad or 0
+    return pos.X >= a.X - pad and pos.X <= a.X + s.X + pad and
+        pos.Y >= a.Y - pad and pos.Y <= a.Y + s.Y + pad
+end
+
 local function overMyUI(pos)
     local ok, objs = pcall(function()
         return UIS:GetGuiObjectsAtPosition(Vector2.new(pos.X, pos.Y))
     end)
     if not ok or type(objs) ~= "table" then
-        local vp = viewport()
-        return pos.X < vp.X * 0.45
+        if CamStick.Visible and inRect(pos, CamStick, 8) then return true end
+        if CamPanel.Visible and inRect(pos, CamPanel, 4) then return true end
+        if Main.Visible and inRect(pos, Main, 4) then return true end
+        return false
     end
     for _, o in ipairs(objs) do
         if o and o:IsA("GuiObject") and o.Visible and o.ZIndex >= 10 then
@@ -901,40 +1021,59 @@ local function overMyUI(pos)
     return false
 end
 
-local function sameInput(a, b)
-    if a == b then return true end
-    if a and b and a.UserInputType == b.UserInputType and
-        a.UserInputType ~= Enum.UserInputType.Touch then return true end
-    return false
+local function isTouch(i)
+    return i.UserInputType == Enum.UserInputType.Touch
+end
+local function isPress(i)
+    return i.UserInputType == Enum.UserInputType.MouseButton1 or isTouch(i)
 end
 
+-- 两根手指完全独立：摇杆一根、滑屏一根，互不阻塞、可任意先后按下/松开
 UIS.InputBegan:Connect(function(i)
-    if not Spectating or camStickInput or camLookInput then return end
-    if i.UserInputType ~= Enum.UserInputType.MouseButton1 and
-        i.UserInputType ~= Enum.UserInputType.Touch then return end
+    if not Spectating or not isPress(i) then return end
     if CamStick.Visible and inStick(i.Position) then return end
+    if camLookInput then return end
     if overMyUI(i.Position) then return end
     camLookInput = i
     camLookStart = i.Position
 end)
+
 UIS.InputChanged:Connect(function(i)
-    if not camLookInput or not camLookStart or not Spectating then return end
-    local touchSame = camLookInput.UserInputType == Enum.UserInputType.Touch and i == camLookInput
-    local mouseMove = i.UserInputType == Enum.UserInputType.MouseMovement and
-        camLookInput.UserInputType ~= Enum.UserInputType.Touch
-    if not (touchSame or mouseMove) then return end
-    local d = i.Position - camLookStart
-    camLookStart = i.Position
-    camYaw = camYaw - d.X * 0.006
-    camPitch = math.clamp(camPitch - d.Y * 0.006, -1.45, 1.45)
+    if not Spectating then return end
+    if i.UserInputType ~= Enum.UserInputType.MouseMovement and not isTouch(i) then return end
+    if camStickInput and (i == camStickInput or
+        (i.UserInputType == Enum.UserInputType.MouseMovement and not isTouch(camStickInput))) then
+        local c = CamStick.AbsolutePosition + CamStick.AbsoluteSize / 2
+        local d = Vector2.new(i.Position.X - c.X, i.Position.Y - c.Y)
+        local m = math.min(1, d.Magnitude / 42)
+        camStickVec = d.Magnitude > 0 and d.Unit * m or Vector2.new(0, 0)
+        CamKnob.Position = UDim2.new(0.5, -24 + camStickVec.X * 34,
+            0.5, -24 + camStickVec.Y * 34)
+        return
+    end
+    if camLookInput and camLookStart then
+        local stickIsThis = camStickInput and i == camStickInput
+        local direct = i == camLookInput
+        local mouseMove = i.UserInputType == Enum.UserInputType.MouseMovement and
+            not isTouch(camLookInput)
+        local otherFinger = isTouch(i) and isTouch(camLookInput) and not stickIsThis
+        if direct or mouseMove or otherFinger then
+            local d = i.Position - camLookStart
+            camLookStart = i.Position
+            camYaw = camYaw - d.X * 0.006
+            camPitch = math.clamp(camPitch - d.Y * 0.006, -1.45, 1.45)
+        end
+    end
 end)
+
 UIS.InputEnded:Connect(function(i)
-    if i.UserInputType ~= Enum.UserInputType.MouseButton1 and
-        i.UserInputType ~= Enum.UserInputType.Touch then return end
-    if camLookInput and sameInput(i, camLookInput) then
+    if not isPress(i) then return end
+    if camLookInput and (i == camLookInput or
+        (not isTouch(i) and not isTouch(camLookInput))) then
         camLookInput, camLookStart = nil, nil
     end
-    if camStickInput and sameInput(i, camStickInput) then
+    if camStickInput and (i == camStickInput or
+        (not isTouch(i) and not isTouch(camStickInput))) then
         camStickInput = nil
         camStickVec = Vector2.new(0, 0)
         CamKnob.Position = UDim2.new(0.5, -24, 0.5, -24)
@@ -946,6 +1085,7 @@ SpecBtn.MouseButton1Click:Connect(function()
 end)
 SpecFreeze.MouseButton1Click:Connect(function()
     SpectateFreeze = not SpectateFreeze
+    if SpectateFreeze and GhostOn then stopGhost() end
     if SpectateFreeze then
         local ch = LP.Character
         local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
@@ -1007,6 +1147,7 @@ startMove = function()
         return
     end
     if LoopRunning then stopLoop() end
+    if GhostOn then stopGhost() end
     MoveRunning = true
     MoveGroupId = g.id
     updateMoveUI()
@@ -1019,24 +1160,51 @@ startMove = function()
         local ch0 = LP.Character
         local r0 = ch0 and (ch0:FindFirstChild("HumanoidRootPart") or ch0.PrimaryPart)
         if r0 then rot = r0.CFrame - r0.CFrame.Position end
+        local lens, perim = {}, 0
+        for i = 1, n do
+            local a, b = pts[i], pts[(i % n) + 1]
+            local len = (b - a).Magnitude
+            lens[i] = len
+            perim = perim + len
+        end
         local hb = safe(function()
             return game:GetService("RunService").Heartbeat
         end)
         while MoveRunning do
             local dt = hb and hb:Wait() or task.wait(0.03)
             if not MoveRunning then break end
-            dt = math.min(tonumber(dt) or 0.03, 0.1)
+            dt = tonumber(dt) or 0.03
+            if dt <= 0 then dt = 0.03 end
             local ch = LP.Character
             if not ch or not ch.PrimaryPart then break end
-            local target = pts[idx]
-            local d = target - cur
-            local dist = d.Magnitude
-            local step = Speed * dt
-            if dist <= step or dist < 0.05 then
-                cur = target
-                idx = idx % n + 1
+            local budget = Speed * dt
+            if perim < 0.001 then
+                cur = pts[idx]
             else
-                cur = cur + d.Unit * step
+                local d = pts[idx] - cur
+                local rem = d.Magnitude
+                if rem > budget then
+                    cur = cur + d.Unit * budget
+                else
+                    budget = budget - rem
+                    cur = pts[idx]
+                    idx = idx % n + 1
+                    budget = budget % perim
+                    local k = 0
+                    while budget > 0 and k <= n do
+                        k = k + 1
+                        local seg = lens[idx] or 0
+                        if seg <= budget then
+                            budget = budget - seg
+                            idx = idx % n + 1
+                        else
+                            local a, b = pts[idx], pts[(idx % n) + 1]
+                            cur = a + (b - a).Unit * budget
+                            budget = 0
+                        end
+                    end
+                    if budget > 0 then cur = pts[idx] end
+                end
             end
             pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
         end
@@ -1051,6 +1219,7 @@ startLoop = function(g)
         return
     end
     if MoveRunning then stopMove() end
+    if GhostOn then stopGhost() end
     if not g or not g.coordIds or #g.coordIds == 0 then
         showToast("组合为空")
         return
@@ -1228,7 +1397,7 @@ refreshG = function()
     end
     local h = #sorted * 50
     GList.Size = UDim2.new(1, -20, 0, h)
-    GPage.CanvasSize = UDim2.new(0, 0, 0, 126 + h + 12)
+    GPage.CanvasSize = UDim2.new(0, 0, 0, 164 + h + 12)
 end
 
 openManage = function()
@@ -1620,6 +1789,40 @@ end)
 MngB.MouseButton1Click:Connect(function() openManage() end)
 
 MoveBtn.MouseButton1Click:Connect(function() startMove() end)
+GhostBtn.MouseButton1Click:Connect(startGhost)
+GhostHzBox.FocusLost:Connect(function()
+    local n = tonumber(GhostHzBox.Text)
+    if n and n == n and n > 0 and n < math.huge then
+        GhostHz = n
+        safe(function() LP:SetAttribute(K_GHOST, {hz = GhostHz, gap = GhostGap}) end)
+        showToast("分身频率 " .. tostring(GhostHz) .. "Hz")
+    else
+        GhostHzBox.Text = tostring(GhostHz)
+        showToast("频率需大于 0")
+    end
+end)
+GhostGapBox.FocusLost:Connect(function()
+    local n = tonumber(GhostGapBox.Text)
+    if n and n == n and n > 0 and n < math.huge then
+        GhostGap = n
+        safe(function() LP:SetAttribute(K_GHOST, {hz = GhostHz, gap = GhostGap}) end)
+        showToast("残影间距 " .. tostring(GhostGap) .. " studs")
+    else
+        GhostGapBox.Text = tostring(GhostGap)
+        showToast("间距需大于 0")
+    end
+end)
+CamSpeedBox.FocusLost:Connect(function()
+    local n = tonumber(CamSpeedBox.Text)
+    if n and n == n and n > 0 and n < math.huge then
+        SpectateSpeed = n
+        safe(function() LP:SetAttribute(K_CAMSPEED, SpectateSpeed) end)
+        showToast("旁观速度 " .. tostring(SpectateSpeed))
+    else
+        CamSpeedBox.Text = tostring(SpectateSpeed)
+        showToast("速度需大于 0")
+    end
+end)
 SpeedBox.FocusLost:Connect(function()
     local n = tonumber(SpeedBox.Text)
     if n and n == n and n > 0 and n < math.huge then
@@ -1631,6 +1834,218 @@ SpeedBox.FocusLost:Connect(function()
         showToast("速度需填大于 0 的数字")
     end
 end)
+
+local function deepCopy(v)
+    local ok, out = pcall(function()
+        return HttpService:JSONDecode(HttpService:JSONEncode(v))
+    end)
+    if ok and out ~= nil then return out end
+    return v
+end
+
+local function snapshot()
+    return {
+        coords = deepCopy(Coords), groups = deepCopy(Groups),
+        quick = QuickGroupId, interval = Interval,
+        speed = Speed, camSpeed = SpectateSpeed,
+        ghostHz = GhostHz, ghostGap = GhostGap
+    }
+end
+
+local function applySnapshot(d)
+    if type(d) ~= "table" then return false end
+    if type(d.coords) == "table" then Coords = deepCopy(d.coords) end
+    if type(d.groups) == "table" then Groups = deepCopy(d.groups) end
+    QuickGroupId = (type(d.quick) == "string" and d.quick ~= "") and d.quick or nil
+    if type(d.interval) == "number" and d.interval > 0 then Interval = d.interval end
+    if type(d.speed) == "number" and d.speed > 0 then Speed = d.speed end
+    if type(d.camSpeed) == "number" and d.camSpeed > 0 then SpectateSpeed = d.camSpeed end
+    if type(d.ghostHz) == "number" and d.ghostHz > 0 then GhostHz = d.ghostHz end
+    if type(d.ghostGap) == "number" and d.ghostGap > 0 then GhostGap = d.ghostGap end
+    safe(function() LP:SetAttribute(K_SPEED, Speed) end)
+    safe(function() LP:SetAttribute(K_CAMSPEED, SpectateSpeed) end)
+    safe(function() LP:SetAttribute(K_INTERV, Interval) end)
+    safe(function() LP:SetAttribute(K_GHOST, {hz = GhostHz, gap = GhostGap}) end)
+    safe(function() LP:SetAttribute(K_QUICK, QuickGroupId or "") end)
+    saveAttr(K_COORDS, Coords)
+    saveAttr(K_GROUPS, Groups)
+    SpeedBox.Text = tostring(Speed)
+    CamSpeedBox.Text = tostring(SpectateSpeed)
+    GhostHzBox.Text = tostring(GhostHz)
+    GhostGapBox.Text = tostring(GhostGap)
+    refreshC()
+    refreshG()
+    updateQuickUI()
+    updateMoveUI()
+    return true
+end
+
+local function saveConfigsNow()
+    local ok = pcall(function()
+        LP:SetAttribute(K_CONFIGS, HttpService:JSONEncode(Configs))
+    end)
+    if not ok then return false end
+    local raw = safe(function() return LP:GetAttribute(K_CONFIGS) end)
+    if type(raw) ~= "string" or raw == "" then return false end
+    trySaveDS(K_CONFIGS, Configs)
+    return true
+end
+
+local function updateCfgLabel()
+    CfgNow.Text = "当前配置: " .. (ActiveConfig or "无") .. "  (" .. #Configs .. " 个槽)"
+end
+
+local function findCfg(name)
+    for i, c in ipairs(Configs) do
+        if tostring(c.name or "") == name then return i, c end
+    end
+    return nil, nil
+end
+
+local function cfgSave(name)
+    name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then showToast("配置名不能为空") return false end
+    local idx = findCfg(name)
+    local entry = {name = name, data = snapshot()}
+    if idx then Configs[idx] = entry else table.insert(Configs, entry) end
+    if not saveConfigsNow() then
+        showToast("❌ 保存失败，请重试")
+        return false
+    end
+    ActiveConfig = name
+    safe(function() LP:SetAttribute(K_ACTIVE, name) end)
+    updateCfgLabel()
+    showToast("✅ 已保存「" .. name .. "」 " .. #Coords .. "坐标 / " .. #Groups .. "组合")
+    return true
+end
+
+local function cfgLoad(name)
+    local _, c = findCfg(name)
+    if not c or type(c.data) ~= "table" then showToast("配置不存在或已损坏") return false end
+    if not applySnapshot(c.data) then showToast("加载失败") return false end
+    ActiveConfig = name
+    safe(function() LP:SetAttribute(K_ACTIVE, name) end)
+    updateCfgLabel()
+    showToast("✅ 已加载「" .. name .. "」")
+    return true
+end
+
+local function cfgPick(name)
+    if not cfgLoad(name) then return end
+    showToast("⭐「" .. name .. "」设为默认，下次执行自动加载")
+end
+
+local function cfgDelete(name)
+    local idx = findCfg(name)
+    if not idx then return end
+    table.remove(Configs, idx)
+    if ActiveConfig == name then
+        ActiveConfig = nil
+        safe(function() LP:SetAttribute(K_ACTIVE, "") end)
+    end
+    saveConfigsNow()
+    updateCfgLabel()
+    showToast("🗑 已删除「" .. name .. "」")
+end
+
+local function openConfigs(hint)
+    local ov = newOverlay()
+    local z = ov.ZIndex
+    local win = make("Frame", {
+        Size = UDim2.new(0, 278, 0, 352),
+        Position = UDim2.new(0.5, -139, 0.5, -176),
+        BackgroundColor3 = C_BG2,
+        ZIndex = z + 1,
+        CornerRadius = 10,
+        Parent = ov
+    })
+    rainbowBorder(win, 2, 12, false)
+    label(win, "📂 配置管理", UDim2.new(1, -44, 0, 26), UDim2.new(0, 10, 0, 8), C_WHITE, 14, z + 2)
+    local xb = button(win, "X", UDim2.new(0, 30, 0, 26), UDim2.new(1, -36, 0, 8), C_RED, 13, z + 2)
+    label(win, hint or "", UDim2.new(1, -16, 0, 20), UDim2.new(0, 8, 0, 33), C_ORG, 9, z + 2)
+    local nameBox = make("TextBox", {
+        Text = ActiveConfig or "配置 1",
+        Size = UDim2.new(0, 172, 0, 28),
+        Position = UDim2.new(0, 8, 0, 56),
+        BackgroundColor3 = C_BG3, TextColor3 = C_WHITE,
+        PlaceholderText = "输入配置名", PlaceholderColor3 = C_TXT2,
+        Font = Enum.Font.Gotham, TextSize = 11,
+        ClearTextOnFocus = false, ZIndex = z + 2, Parent = win
+    })
+    local saveBtn = button(win, "💾 保存", UDim2.new(0, 84, 0, 28),
+        UDim2.new(1, -92, 0, 56), C_GREEN, 11, z + 2)
+    local scroll = make("ScrollingFrame", {
+        Size = UDim2.new(1, -16, 1, -96),
+        Position = UDim2.new(0, 8, 0, 90),
+        BackgroundColor3 = C_BG, ScrollBarThickness = 4,
+        ZIndex = z + 2, Parent = win
+    })
+    local escConn = nil
+    local function close()
+        if escConn then safe(function() escConn:Disconnect() end) end
+        closeOverlay(ov)
+    end
+    xb.MouseButton1Click:Connect(close)
+    escConn = UIS.InputBegan:Connect(function(i)
+        if i.KeyCode == Enum.KeyCode.Escape and ov.ZIndex == modalDepth then close() end
+    end)
+
+    local function rebuild()
+        for _, v in ipairs(scroll:GetChildren()) do
+            if v:IsA("GuiObject") then v:Destroy() end
+        end
+        local y = 6
+        if #Configs == 0 then
+            label(scroll, "还没有配置，先在上方输入名字点保存", UDim2.new(1, -12, 0, 30),
+                UDim2.new(0, 6, 0, y), C_TXT2, 10, z + 3)
+            y = y + 36
+        end
+        for _, c in ipairs(Configs) do
+            local nm = tostring(c.name or "?")
+            local row = make("Frame", {
+                Size = UDim2.new(1, -8, 0, 56),
+                Position = UDim2.new(0, 4, 0, y),
+                BackgroundColor3 = ActiveConfig == nm and C_BG3 or C_BG2,
+                ZIndex = z + 3, Parent = scroll
+            })
+            local nCoord = (type(c.data) == "table" and type(c.data.coords) == "table") and #c.data.coords or 0
+            label(row, (ActiveConfig == nm and "⭐ " or "") .. nm .. "  (" .. nCoord .. "坐标)",
+                UDim2.new(1, -12, 0, 24), UDim2.new(0, 8, 0, 2), C_TXT, 11, z + 4)
+            local lb = button(row, "加载", UDim2.new(0, 62, 0, 24), UDim2.new(0, 8, 0, 28), C_BLUE, 10, z + 4)
+            local pb = button(row, "选中", UDim2.new(0, 62, 0, 24), UDim2.new(0, 76, 0, 28), C_GREEN, 10, z + 4)
+            local db = button(row, "删", UDim2.new(0, 56, 0, 24), UDim2.new(1, -64, 0, 28), C_RED, 10, z + 4)
+            lb.MouseButton1Click:Connect(function() cfgLoad(nm) rebuild() end)
+            pb.MouseButton1Click:Connect(function() cfgPick(nm) rebuild() end)
+            local armed = false
+            db.MouseButton1Click:Connect(function()
+                if not armed then
+                    armed = true
+                    db.Text = "确认?"
+                    task.delay(3, function()
+                        if db and db.Parent then armed = false db.Text = "删" end
+                    end)
+                    return
+                end
+                cfgDelete(nm)
+                rebuild()
+            end)
+            y = y + 60
+        end
+        scroll.CanvasSize = UDim2.new(0, 0, 0, y + 8)
+    end
+    saveBtn.MouseButton1Click:Connect(function()
+        if cfgSave(nameBox.Text) then rebuild() end
+    end)
+    rebuild()
+end
+
+CfgSave.MouseButton1Click:Connect(function()
+    local n = modalInput("💾 保存配置", ActiveConfig or ("配置 " .. tostring(#Configs + 1)))
+    if n then cfgSave(n) end
+end)
+CfgLoad.MouseButton1Click:Connect(function() openConfigs("点『加载』读取槽位") end)
+CfgPick.MouseButton1Click:Connect(function() openConfigs("点『选中』设为默认并加载") end)
+CfgDel.MouseButton1Click:Connect(function() openConfigs("点『删』两次确认删除") end)
 
 LoadB.MouseButton1Click:Connect(function()
     local c = tryLoadDS(K_COORDS)
@@ -1659,7 +2074,9 @@ JsnB.MouseButton1Click:Connect(function()
     local j = safe(function()
         return HttpService:JSONEncode({
             coords = Coords, groups = Groups,
-            quick = QuickGroupId, interval = Interval, speed = Speed
+            quick = QuickGroupId, interval = Interval, speed = Speed,
+            camSpeed = SpectateSpeed, ghostHz = GhostHz, ghostGap = GhostGap,
+            configs = Configs, activeConfig = ActiveConfig
         })
     end)
     ExpB.Text = j or "导出失败"
@@ -1710,6 +2127,7 @@ QuitB.MouseButton1Click:Connect(function()
     if not ok then return end
     if LoopRunning then stopLoop() end
     if MoveRunning then stopMove() end
+    if GhostOn then stopGhost() end
     if Spectating then exitSpectate() end
     if RunService then
         pcall(function() RunService:UnbindFromRenderStep("TC_SpectateCam") end)
@@ -1784,6 +2202,7 @@ end)
 LP.CharacterAdded:Connect(function()
     if LoopRunning then stopLoop() end
     if MoveRunning then stopMove() end
+    if GhostOn then stopGhost() end
 end)
 
 local c = loadAttr(K_COORDS)
@@ -1796,7 +2215,28 @@ local iv = safe(function() return LP:GetAttribute(K_INTERV) end)
 if type(iv) == "number" and iv >= 0.1 then Interval = iv end
 local sp = safe(function() return LP:GetAttribute(K_SPEED) end)
 if type(sp) == "number" and sp == sp and sp > 0 and sp < math.huge then Speed = sp end
+local cs = safe(function() return LP:GetAttribute(K_CAMSPEED) end)
+if type(cs) == "number" and cs == cs and cs > 0 and cs < math.huge then SpectateSpeed = cs end
+local gh = safe(function() return LP:GetAttribute(K_GHOST) end)
+if type(gh) == "table" then
+    if type(gh.hz) == "number" and gh.hz > 0 then GhostHz = gh.hz end
+    if type(gh.gap) == "number" and gh.gap > 0 then GhostGap = gh.gap end
+end
+local cfgs = loadAttr(K_CONFIGS)
+if type(cfgs) == "table" then Configs = cfgs end
+local act = safe(function() return LP:GetAttribute(K_ACTIVE) end)
+if type(act) == "string" and act ~= "" then
+    local _, slot = findCfg(act)
+    if slot and type(slot.data) == "table" then
+        ActiveConfig = act
+        applySnapshot(slot.data)
+    end
+end
 SpeedBox.Text = tostring(Speed)
+CamSpeedBox.Text = tostring(SpectateSpeed)
+GhostHzBox.Text = tostring(GhostHz)
+GhostGapBox.Text = tostring(GhostGap)
+updateCfgLabel()
 
 refreshC()
 refreshG()
@@ -1804,4 +2244,4 @@ switchTab(1)
 applyLayout()
 updateQuickUI()
 updateMoveUI()
-showToast("TC坐标传送 已加载")
+showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
