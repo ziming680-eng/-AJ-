@@ -34,10 +34,9 @@ local minimized = false
 local quickOn = false
 local currentTab = 1
 local Spectating = false
-local SpectateRedirect = true
+local SpectateFreeze = false
 local savedCamType, savedCamSubject = nil, nil
 local camPos = Vector3.new(0, 0, 0)
-local camBaseRot = CFrame.new()
 local camYaw, camPitch = 0, 0
 local camStickVec = Vector2.new(0, 0)
 local camStickInput = nil
@@ -481,10 +480,6 @@ local function modalConfirm(title, msg, okText)
 end
 
 local function tel(x, y, z)
-    if Spectating and SpectateRedirect then
-        camPos = Vector3.new(x, y, z)
-        return true
-    end
     local char = LP.Character
     if not char or not char.PrimaryPart then
         char = safe(function() return LP.CharacterAdded:Wait() end)
@@ -709,7 +704,7 @@ local SpecBar = make("Frame", {
     Parent = Main
 })
 local SpecBtn = button(SpecBar, "旁观视角", UDim2.new(0, 150, 0, 30), UDim2.new(0, 4, 0, 2), C_BG3, 11, 15)
-local SpecMode = button(SpecBar, "模式:视角", UDim2.new(0, 118, 0, 30), UDim2.new(0, 158, 0, 2), C_BLUE, 10, 15)
+local SpecFreeze = button(SpecBar, "角色定身 ✕", UDim2.new(0, 118, 0, 30), UDim2.new(0, 158, 0, 2), C_BG3, 10, 15)
 
 local CamPanel = make("Frame", {
     Size = UDim2.new(0, 168, 0, 62),
@@ -730,8 +725,8 @@ local CamHdr = make("Frame", {
 })
 label(CamHdr, "自由视角", UDim2.new(1, -62, 1, 0), UDim2.new(0, 9, 0, 0), C_WHITE, 12, 32)
 local CamExit = button(CamHdr, "退出", UDim2.new(0, 48, 0, 24), UDim2.new(1, -54, 0, 2), C_RED, 11, 32)
-local CamHint = label(CamPanel, "右滑转视角 · 左摇杆移动", UDim2.new(1, -12, 0, 28),
-    UDim2.new(0, 6, 0, 32), C_ORG, 10, 32, Enum.TextXAlignment.Center)
+local CamHint = label(CamPanel, "滑屏转视角 · 摇杆飞相机 · 镜头不跟随", UDim2.new(1, -12, 0, 28),
+    UDim2.new(0, 6, 0, 32), C_ORG, 9, 32, Enum.TextXAlignment.Center)
 
 local CamStick = make("Frame", {
     Size = UDim2.new(0, 116, 0, 116),
@@ -768,8 +763,9 @@ local function enterSpectate()
     savedCamSubject = cam.CameraSubject
     local cf = cam.CFrame
     camPos = cf.Position
-    camBaseRot = cf - cf.Position
-    camYaw, camPitch = 0, 0
+    local ox, oy = cf:ToOrientation()
+    camYaw = oy or 0
+    camPitch = math.clamp(ox or 0, -1.45, 1.45)
     camStickVec = Vector2.new(0, 0)
     camStickInput, camLookInput, camLookStart = nil, nil, nil
     CamKnob.Position = UDim2.new(0.5, -24, 0.5, -24)
@@ -780,12 +776,13 @@ local function enterSpectate()
     pcall(function()
         cam.CameraType = Enum.CameraType.Scriptable
         cam.CameraSubject = nil
+        cam.CFrame = CFrame.new(camPos) * CFrame.Angles(0, camYaw, 0) * CFrame.Angles(camPitch, 0, 0)
     end)
     CamPanel.Visible = true
     CamStick.Visible = true
     SpecBtn.Text = "退出旁观"
     SpecBtn.BackgroundColor3 = C_ORG
-    showToast("旁观已开 · 右滑转视角 / 左下摇杆移动")
+    showToast("旁观已开 · 镜头独立不跟随 · 滑屏转向 / 摇杆飞行")
 end
 
 local function exitSpectate()
@@ -813,44 +810,42 @@ local function exitSpectate()
 end
 
 local RunService = safe(function() return game:GetService("RunService") end)
-if RunService then
+local function spectateStep(dt)
+    if not Spectating then return end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    dt = math.min(tonumber(dt) or 0.03, 0.1)
+    local UP = Vector3.new(0, 1, 0)
+    local dir = (CFrame.Angles(0, camYaw, 0) * CFrame.Angles(camPitch, 0, 0)).LookVector
+    local cf0 = CFrame.lookAt(camPos, camPos + dir, UP)
+    local v = cf0.LookVector * (-camStickVec.Y) + cf0.RightVector * camStickVec.X
+    if v.Magnitude > 0.01 then
+        camPos = camPos + v.Unit * (Speed * dt) * math.min(1, v.Magnitude)
+    end
+    if SpectateFreeze and spectateCharCF then
+        local ch = LP.Character
+        local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+        if root and (root.CFrame.Position - spectateCharCF.Position).Magnitude > 0.4 then
+            pcall(function()
+                root.CFrame = spectateCharCF
+                root.AssemblyLinearVelocity = Vector3.zero
+            end)
+        end
+    end
     pcall(function()
-        RunService.RenderStepped:Connect(function(dt)
-            if not Spectating then return end
-            local cam = workspace.CurrentCamera
-            if not cam then return end
-            pcall(function() cam.CameraType = Enum.CameraType.Scriptable end)
-            dt = math.min(tonumber(dt) or 0.03, 0.1)
-            local rot = CFrame.Angles(camPitch, camYaw, 0)
-            local cf = CFrame.new(camPos) * camBaseRot * rot
-            local _, yawOnly = cf:ToEulerAnglesYXZ()
-            local flat = CFrame.Angles(0, yawOnly, 0)
-            local f = flat.LookVector
-            local r = flat.RightVector
-            local v = f * (-camStickVec.Y) + r * camStickVec.X
-            local step = Vector3.zero
-            if v.Magnitude > 0.01 then
-                step = v.Unit * (Speed * dt) * math.min(1, v.Magnitude)
-            end
-            local ch = LP.Character
-            local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
-            if SpectateRedirect then
-                camPos = camPos + step
-                if root and spectateCharCF then
-                    local drift = (root.CFrame.Position - spectateCharCF.Position).Magnitude
-                    if drift > 0.4 then
-                        pcall(function()
-                            root.CFrame = spectateCharCF
-                            root.AssemblyLinearVelocity = Vector3.zero
-                        end)
-                    end
-                end
-            elseif root and step.Magnitude > 0 then
-                pcall(function() root.CFrame = root.CFrame + step end)
-            end
-            cam.CFrame = CFrame.new(camPos) * camBaseRot * rot
-        end)
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CameraSubject = nil
+        cam.CFrame = CFrame.lookAt(camPos, camPos + dir, UP)
     end)
+end
+if RunService then
+    local bound = pcall(function()
+        RunService:BindToRenderStep("TC_SpectateCam",
+            Enum.RenderPriority.Camera.Value + 1, spectateStep)
+    end)
+    if not bound then
+        pcall(function() RunService.RenderStepped:Connect(spectateStep) end)
+    end
 end
 
 -- 左下摇杆：按住拖动，方向映射到前进/左右
@@ -949,12 +944,17 @@ end)
 SpecBtn.MouseButton1Click:Connect(function()
     if Spectating then exitSpectate() else enterSpectate() end
 end)
-SpecMode.MouseButton1Click:Connect(function()
-    SpectateRedirect = not SpectateRedirect
-    SpecMode.Text = SpectateRedirect and "模式:视角" or "模式:角色"
-    SpecMode.BackgroundColor3 = SpectateRedirect and C_BLUE or C_PURP
-    CamHint.Text = SpectateRedirect and "角色留在原地" or "摇杆移动角色"
-    showToast(SpectateRedirect and "角色不动，摇杆飞视角" or "摇杆移动角色，视角独立")
+SpecFreeze.MouseButton1Click:Connect(function()
+    SpectateFreeze = not SpectateFreeze
+    if SpectateFreeze then
+        local ch = LP.Character
+        local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+        spectateCharCF = root and root.CFrame or nil
+    end
+    SpecFreeze.Text = SpectateFreeze and "角色定身 ✓" or "角色定身 ✕"
+    SpecFreeze.BackgroundColor3 = SpectateFreeze and C_GREEN or C_BG3
+    CamHint.Text = SpectateFreeze and "角色钉在原地 · 镜头独立" or "滑屏转视角 · 摇杆飞相机 · 镜头不跟随"
+    showToast(SpectateFreeze and "角色已定身，传送/移动不带动本体" or "角色照常传送移动，镜头仍独立")
 end)
 CamExit.MouseButton1Click:Connect(exitSpectate)
 
@@ -1014,7 +1014,7 @@ startMove = function()
     MoveThread = task.spawn(function()
         local n = #pts
         local idx = 1
-        local cur = (Spectating and SpectateRedirect) and camPos or (getPos() or pts[1])
+        local cur = getPos() or pts[1]
         local rot = CFrame.new()
         local ch0 = LP.Character
         local r0 = ch0 and (ch0:FindFirstChild("HumanoidRootPart") or ch0.PrimaryPart)
@@ -1027,8 +1027,7 @@ startMove = function()
             if not MoveRunning then break end
             dt = math.min(tonumber(dt) or 0.03, 0.1)
             local ch = LP.Character
-            local toCam = Spectating and SpectateRedirect
-            if not toCam and (not ch or not ch.PrimaryPart) then break end
+            if not ch or not ch.PrimaryPart then break end
             local target = pts[idx]
             local d = target - cur
             local dist = d.Magnitude
@@ -1039,11 +1038,7 @@ startMove = function()
             else
                 cur = cur + d.Unit * step
             end
-            if toCam then
-                camPos = cur
-            else
-                pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
-            end
+            pcall(function() ch:PivotTo(CFrame.new(cur) * rot) end)
         end
         if MoveRunning then stopMove() end
     end)
@@ -1716,6 +1711,9 @@ QuitB.MouseButton1Click:Connect(function()
     if LoopRunning then stopLoop() end
     if MoveRunning then stopMove() end
     if Spectating then exitSpectate() end
+    if RunService then
+        pcall(function() RunService:UnbindFromRenderStep("TC_SpectateCam") end)
+    end
     if spinTween then safe(function() spinTween:Cancel() end) end
     safe(function() Gui:Destroy() end)
 end)
