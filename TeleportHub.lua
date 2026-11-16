@@ -1,12 +1,11 @@
 -- TC坐标传送 · Delta 执行器专用（纯客户端 / 手机竖屏）
-local function TCMain()
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
 local LP = Players.LocalPlayer
-local PlayerGui = LP:WaitForChild("PlayerGui")
+local PlayerGui = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui")
 
 local DSStore = nil
 pcall(function()
@@ -2292,52 +2291,19 @@ if type(act) == "string" and act ~= "" then
     local _, slot = findCfg(act)
     if slot and type(slot.data) == "table" then
         ActiveConfig = act
-        safe(function() applySnapshot(slot.data) end)
+        applySnapshot(slot.data)
     end
 end
-safe(function() SpeedBox.Text = tostring(Speed) end)
-safe(function() CamSpeedBox.Text = tostring(SpectateSpeed) end)
-safe(function() GhostSpeedBox.Text = tostring(GhostSpeed) end)
-safe(function() GhostGapBox.Text = tostring(GhostGap) end)
-safe(function() updateCfgLabel() end)
+SpeedBox.Text = tostring(Speed)
+CamSpeedBox.Text = tostring(SpectateSpeed)
+GhostSpeedBox.Text = tostring(GhostSpeed)
+GhostGapBox.Text = tostring(GhostGap)
+updateCfgLabel()
 
-safe(function() refreshC() end)
-safe(function() refreshG() end)
-safe(function() switchTab(1) end)
-safe(function() applyLayout() end)
-safe(function() updateQuickUI() end)
-safe(function() updateMoveUI() end)
-safe(function()
-    showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
-end)
-end
-
-local TCOK, TCERR = pcall(TCMain)
-if not TCOK then
-    pcall(function()
-        local pg = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
-        local eg = Instance.new("ScreenGui")
-        eg.Name = "TC_ErrorHint"
-        eg.ResetOnSpawn = false
-        eg.DisplayOrder = 99999
-        eg.Parent = pg
-        local f = Instance.new("Frame")
-        f.Size = UDim2.new(1, -20, 0, 130)
-        f.Position = UDim2.new(0, 10, 0.35, 0)
-        f.BackgroundColor3 = Color3.fromRGB(140, 30, 30)
-        f.BorderSizePixel = 0
-        f.Parent = eg
-        local t = Instance.new("TextLabel")
-        t.Size = UDim2.new(1, -16, 1, -16)
-        t.Position = UDim2.new(0, 8, 0, 8)
-        t.BackgroundTransparency = 1
-        t.TextColor3 = Color3.fromRGB(255, 255, 255)
-        t.Font = Enum.Font.GothamBold
-        t.TextSize = 13
-        t.TextWrapped = true
-        t.TextXAlignment = Enum.TextXAlignment.Left
-        t.TextYAlignment = Enum.TextYAlignment.Top
-        t.Text = "TC坐标传送 启动出错:\n" .. tostring(TCERR) .. "\n(截图发我即可定位；数据未丢失)"
-        t.Parent = f
-    end)
-end
+refreshC()
+refreshG()
+switchTab(1)
+applyLayout()
+updateQuickUI()
+updateMoveUI()
+showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
