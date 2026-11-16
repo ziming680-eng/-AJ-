@@ -42,19 +42,18 @@ local SpectateSpeed = 50
 local GhostOn = false
 local GhostSpeed = 100000000
 local GhostGap = 3
+local GhostRows = 2
 local GhostAnchor = nil
 local GhostRot = CFrame.new()
 local GhostFront = Vector3.new(0, 0, -1)
 local GhostRight = Vector3.new(1, 0, 0)
 local GhostPts = {}
 local GhostLens = {}
+local GhostN = 0
 local GhostPerim = 0
-local GhostIdx = 1
+local GhostPhase = 0
 local GhostCur = Vector3.new(0, 0, 0)
 local GhostMoveDir = Vector3.zero
-local GhostAutoSpec = false
-local GhostCamAhead = 10
-local GhostCamHeight = 7
 local Configs = {}
 local ActiveConfig = nil
 local Spectating = false
@@ -634,14 +633,14 @@ local SpeedBox = make("TextBox", {
     Parent = MoveBar
 })
 local GhostBar = make("Frame", {
-    Size = UDim2.new(1, -20, 0, 34),
+    Size = UDim2.new(1, -20, 0, 64),
     Position = UDim2.new(0, 10, 0, 126),
     BackgroundTransparency = 1,
     ZIndex = 12,
     Parent = GPage
 })
 local GhostBtn = button(GhostBar, "👻 分身残影", UDim2.new(0, 96, 0, 34), UDim2.new(0, 0, 0, 0), C_BG3, 11, 13)
-label(GhostBar, "速", UDim2.new(0, 18, 1, 0), UDim2.new(0, 98, 0, 0), C_TXT2, 10, 13)
+label(GhostBar, "速", UDim2.new(0, 18, 0, 30), UDim2.new(0, 98, 0, 0), C_TXT2, 10, 13)
 local GhostSpeedBox = make("TextBox", {
     Text = tostring(GhostSpeed), Size = UDim2.new(0, 64, 0, 30),
     Position = UDim2.new(0, 116, 0, 2), TextScaled = true,
@@ -649,17 +648,26 @@ local GhostSpeedBox = make("TextBox", {
     PlaceholderColor3 = C_TXT2, Font = Enum.Font.GothamBold, TextSize = 11,
     ClearTextOnFocus = false, ZIndex = 13, Parent = GhostBar
 })
-label(GhostBar, "距", UDim2.new(0, 18, 1, 0), UDim2.new(0, 182, 0, 0), C_TXT2, 10, 13)
+label(GhostBar, "距", UDim2.new(0, 18, 0, 30), UDim2.new(0, 0, 0, 32), C_TXT2, 10, 13)
 local GhostGapBox = make("TextBox", {
-    Text = tostring(GhostGap), Size = UDim2.new(0, 52, 0, 30),
-    Position = UDim2.new(0, 200, 0, 2), TextScaled = true,
+    Text = tostring(GhostGap), Size = UDim2.new(0, 52, 0, 28),
+    Position = UDim2.new(0, 18, 0, 34), TextScaled = true,
     BackgroundColor3 = C_BG3, TextColor3 = C_WHITE, PlaceholderText = "3",
     PlaceholderColor3 = C_TXT2, Font = Enum.Font.GothamBold, TextSize = 11,
     ClearTextOnFocus = false, ZIndex = 13, Parent = GhostBar
 })
+label(GhostBar, "排", UDim2.new(0, 18, 0, 30), UDim2.new(0, 76, 0, 32), C_TXT2, 10, 13)
+local GhostRowsBox = make("TextBox", {
+    Text = tostring(GhostRows), Size = UDim2.new(0, 52, 0, 28),
+    Position = UDim2.new(0, 94, 0, 34), TextScaled = true,
+    BackgroundColor3 = C_BG3, TextColor3 = C_WHITE, PlaceholderText = "2",
+    PlaceholderColor3 = C_TXT2, Font = Enum.Font.GothamBold, TextSize = 11,
+    ClearTextOnFocus = false, ZIndex = 13, Parent = GhostBar
+})
+label(GhostBar, "1/2/3… 递增", UDim2.new(0, 108, 0, 30), UDim2.new(0, 152, 0, 32), C_TXT2, 9, 13)
 local GList = make("Frame", {
     Size = UDim2.new(1, -20, 0, 0),
-    Position = UDim2.new(0, 10, 0, 164),
+    Position = UDim2.new(0, 10, 0, 196),
     BackgroundTransparency = 1,
     ZIndex = 12,
     Parent = GPage
@@ -862,13 +870,45 @@ end
 
 local function buildGhostPts()
     local a, f, r, g = GhostAnchor, GhostFront, GhostRight, GhostGap
-    GhostPts[1] = a
-    GhostPts[2] = a - f * g + r * (g * 0.8)
-    GhostPts[3] = a - f * g - r * (g * 0.8)
-    GhostLens[1] = (GhostPts[2] - GhostPts[1]).Magnitude
-    GhostLens[2] = (GhostPts[3] - GhostPts[2]).Magnitude
-    GhostLens[3] = (GhostPts[1] - GhostPts[3]).Magnitude
-    GhostPerim = GhostLens[1] + GhostLens[2] + GhostLens[3]
+    if not a then return end
+    local rows = math.clamp(math.floor(GhostRows), 1, 10)
+    local n = 0
+    for row = 1, rows do
+        local cnt = row
+        local back = f * (-(g * (row - 1)))
+        local half = g * 0.8 * (row - 1)
+        for j = 1, cnt do
+            local k = (row % 2 == 0) and (cnt - j + 1) or j
+            local off = (cnt == 1) and 0 or (half * 2 * (k - 1) / (cnt - 1) - half)
+            n = n + 1
+            GhostPts[n] = a + back + r * off
+        end
+    end
+    for i = n + 1, #GhostPts do GhostPts[i] = nil end
+    GhostN = n
+    local perim = 0
+    for i = 1, n do
+        local d = (GhostPts[(i % n) + 1] - GhostPts[i]).Magnitude
+        GhostLens[i] = d
+        perim = perim + d
+    end
+    GhostPerim = perim
+end
+
+local function ghostPointAt(t)
+    if GhostN < 1 then return GhostPts[1] or GhostAnchor end
+    if GhostN == 1 or GhostPerim <= 0.001 then return GhostPts[1] end
+    t = t % GhostPerim
+    for i = 1, GhostN do
+        local seg = GhostLens[i] or 0
+        if t <= seg then
+            local a, b = GhostPts[i], GhostPts[(i % GhostN) + 1]
+            if seg < 0.0001 then return a end
+            return a + (b - a) * (t / seg)
+        end
+        t = t - seg
+    end
+    return GhostPts[1]
 end
 
 local RunService = safe(function() return game:GetService("RunService") end)
@@ -877,62 +917,6 @@ local function spectateStep(dt)
     if dt <= 0 then dt = 0.03 end
     local UP = Vector3.new(0, 1, 0)
     local cam = workspace.CurrentCamera
-    if GhostOn and GhostAnchor then
-        buildGhostPts()
-        local ch = LP.Character
-        local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
-        if root then
-            local hum = ch:FindFirstChildOfClass("Humanoid")
-            local ws = (hum and hum.WalkSpeed) or 16
-            local targetMD = (hum and hum.MoveDirection) or Vector3.zero
-            GhostMoveDir = GhostMoveDir:Lerp(targetMD, math.min(1, dt * 12))
-            local shift = GhostMoveDir * ws * dt
-            GhostAnchor = GhostAnchor + shift
-            GhostCur = GhostCur + shift
-            buildGhostPts()
-            local budget = GhostSpeed * dt
-            if GhostPerim > 0.001 then
-                local d = GhostPts[GhostIdx] - GhostCur
-                local rem = d.Magnitude
-                if rem > budget then
-                    GhostCur = GhostCur + d.Unit * budget
-                else
-                    budget = budget - rem
-                    GhostCur = GhostPts[GhostIdx]
-                    GhostIdx = GhostIdx % 3 + 1
-                    budget = budget % GhostPerim
-                    local k = 0
-                    while budget > 0 and k <= 3 do
-                        k = k + 1
-                        local seg = GhostLens[GhostIdx] or 0
-                        if seg <= budget then
-                            budget = budget - seg
-                            GhostIdx = GhostIdx % 3 + 1
-                        else
-                            local a, b = GhostPts[GhostIdx], GhostPts[(GhostIdx % 3) + 1]
-                            GhostCur = a + (b - a).Unit * budget
-                            budget = 0
-                        end
-                    end
-                    if budget > 0 then GhostCur = GhostPts[GhostIdx] end
-                end
-            else
-                GhostCur = GhostPts[1]
-            end
-            pcall(function() ch:PivotTo(CFrame.new(GhostCur) * GhostRot) end)
-        end
-        if cam then
-            local p0 = GhostPts[1]
-            local eye = p0 + GhostFront * GhostCamAhead + UP * GhostCamHeight
-            local at = p0 - GhostFront * (GhostGap * 0.6) + UP * 1
-            pcall(function()
-                cam.CameraType = Enum.CameraType.Scriptable
-                cam.CameraSubject = nil
-                cam.CFrame = CFrame.lookAt(eye, at, UP)
-            end)
-        end
-        return
-    end
     if not Spectating then return end
     if not cam then return end
     local dir = (CFrame.Angles(0, camYaw, 0) * CFrame.Angles(camPitch, 0, 0)).LookVector
@@ -941,7 +925,7 @@ local function spectateStep(dt)
     if v.Magnitude > 0.01 then
         camPos = camPos + v.Unit * (SpectateSpeed * dt) * math.min(1, v.Magnitude)
     end
-    if SpectateFreeze and spectateCharCF then
+    if SpectateFreeze and spectateCharCF and not GhostOn then
         local ch = LP.Character
         local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
         if root and (root.CFrame.Position - spectateCharCF.Position).Magnitude > 0.4 then
@@ -967,19 +951,52 @@ if RunService then
     end
 end
 
+local function ghostStep(dt)
+    if not GhostOn or not GhostAnchor then return end
+    local ch = LP.Character
+    local root = ch and (ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart) or nil
+    if not root then return end
+    dt = tonumber(dt) or 0.03
+    if dt <= 0 then dt = 0.03 end
+    local UP = Vector3.new(0, 1, 0)
+    local hum = ch:FindFirstChildOfClass("Humanoid")
+    local ws = (hum and hum.WalkSpeed) or 16
+    local md = (hum and hum.MoveDirection) or Vector3.zero
+    GhostMoveDir = GhostMoveDir:Lerp(md, math.min(1, dt * 12))
+    GhostAnchor = GhostAnchor + GhostMoveDir * ws * dt
+    if md.Magnitude > 0.05 then
+        local f = Vector3.new(md.X, 0, md.Z)
+        if f.Magnitude > 0.001 then
+            GhostFront = GhostFront:Lerp(f.Unit, math.min(1, dt * 8))
+            local base = CFrame.lookAt(Vector3.zero, GhostFront, UP)
+            GhostRight = base.RightVector
+            GhostRot = base.Rotation
+        end
+    end
+    buildGhostPts()
+    if GhostPerim > 0.001 then
+        local turns = (GhostSpeed * dt) / GhostPerim
+        if turns > 1e6 then
+            GhostPhase = (GhostPhase + 0.6180339887498949) % 1
+        else
+            GhostPhase = (GhostPhase + turns) % 1
+        end
+        GhostCur = ghostPointAt(GhostPhase * GhostPerim)
+    else
+        GhostCur = GhostPts[1] or GhostAnchor
+    end
+    pcall(function() ch:PivotTo(CFrame.new(GhostCur) * GhostRot) end)
+end
+if RunService then
+    pcall(function() RunService.Heartbeat:Connect(ghostStep) end)
+end
+
 local function stopGhost()
     if not GhostOn then return end
     GhostOn = false
     GhostAnchor = nil
     GhostBtn.Text = "👻 分身残影"
     GhostBtn.BackgroundColor3 = C_BG3
-    if GhostAutoSpec then
-        GhostAutoSpec = false
-        if Spectating then exitSpectate() end
-    elseif Spectating then
-        CamPanel.Visible = true
-        CamStick.Visible = true
-    end
 end
 
 local function startGhost()
@@ -1009,20 +1026,14 @@ local function startGhost()
     GhostRight = base.RightVector
     GhostRot = base.Rotation
     GhostMoveDir = Vector3.zero
-    GhostIdx = 1
+    GhostPhase = 0
     buildGhostPts()
-    GhostCur = GhostPts[1]
-    GhostAutoSpec = false
-    if not Spectating then
-        GhostAutoSpec = true
-        enterSpectate()
-    end
-    CamPanel.Visible = false
-    CamStick.Visible = false
+    GhostCur = GhostPts[1] or GhostAnchor
     GhostOn = true
     GhostBtn.Text = "■ 停止分身"
     GhostBtn.BackgroundColor3 = C_ORG
-    showToast("👻 三角分身 · 速" .. tostring(GhostSpeed) .. " / 间距" .. tostring(GhostGap) .. " · 视角锁定主体")
+    showToast("👻 分身 " .. tostring(GhostRows) .. "排 / " .. tostring(GhostN)
+        .. "点 · 速" .. tostring(GhostSpeed) .. " · 相机自由")
 end
 
 -- 左下摇杆：按住拖动，方向映射到前进/左右
@@ -1133,7 +1144,6 @@ UIS.InputEnded:Connect(function(i)
 end)
 
 SpecBtn.MouseButton1Click:Connect(function()
-    if GhostOn then stopGhost() return end
     if Spectating then exitSpectate() else enterSpectate() end
 end)
 SpecFreeze.MouseButton1Click:Connect(function()
@@ -1450,7 +1460,7 @@ refreshG = function()
     end
     local h = #sorted * 50
     GList.Size = UDim2.new(1, -20, 0, h)
-    GPage.CanvasSize = UDim2.new(0, 0, 0, 164 + h + 12)
+    GPage.CanvasSize = UDim2.new(0, 0, 0, 196 + h + 12)
 end
 
 openManage = function()
@@ -1847,7 +1857,7 @@ GhostSpeedBox.FocusLost:Connect(function()
     local n = tonumber(GhostSpeedBox.Text)
     if n and n == n and n > 0 and n < math.huge then
         GhostSpeed = n
-        saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap})
+        saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap, rows = GhostRows})
         showToast("分身速度 " .. tostring(GhostSpeed))
     else
         GhostSpeedBox.Text = tostring(GhostSpeed)
@@ -1859,11 +1869,24 @@ GhostGapBox.FocusLost:Connect(function()
     if n and n == n and n > 0 and n < math.huge then
         GhostGap = n
         if GhostOn then buildGhostPts() end
-        saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap})
-        showToast("三角间距 " .. tostring(GhostGap) .. " studs")
+        saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap, rows = GhostRows})
+        showToast("阵型间距 " .. tostring(GhostGap) .. " studs")
     else
         GhostGapBox.Text = tostring(GhostGap)
         showToast("间距需大于 0")
+    end
+end)
+GhostRowsBox.FocusLost:Connect(function()
+    local n = tonumber(GhostRowsBox.Text)
+    if n and n == n and n >= 1 and n <= 10 then
+        GhostRows = math.floor(n)
+        if GhostOn then buildGhostPts() end
+        saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap, rows = GhostRows})
+        showToast("分身 " .. tostring(GhostRows) .. " 排 / "
+            .. tostring(math.floor(GhostRows * (GhostRows + 1) / 2)) .. " 个点")
+    else
+        GhostRowsBox.Text = tostring(GhostRows)
+        showToast("排数填 1~10")
     end
 end)
 CamSpeedBox.FocusLost:Connect(function()
@@ -1902,7 +1925,7 @@ local function snapshot()
         coords = deepCopy(Coords), groups = deepCopy(Groups),
         quick = QuickGroupId, interval = Interval,
         speed = Speed, camSpeed = SpectateSpeed,
-        ghostSpeed = GhostSpeed, ghostGap = GhostGap
+        ghostSpeed = GhostSpeed, ghostGap = GhostGap, ghostRows = GhostRows
     }
 end
 
@@ -1918,10 +1941,13 @@ local function applySnapshot(d)
     if type(d.ghostSpeed) == "number" and d.ghostSpeed > 0 then GhostSpeed = d.ghostSpeed end
     if type(d.ghostHz) == "number" and d.ghostHz > 0 then GhostSpeed = d.ghostHz * 100000 end
     if type(d.ghostGap) == "number" and d.ghostGap > 0 then GhostGap = d.ghostGap end
+    if type(d.ghostRows) == "number" and d.ghostRows >= 1 and d.ghostRows <= 10 then
+        GhostRows = math.floor(d.ghostRows)
+    end
     safe(function() LP:SetAttribute(K_SPEED, Speed) end)
     safe(function() LP:SetAttribute(K_CAMSPEED, SpectateSpeed) end)
     safe(function() LP:SetAttribute(K_INTERV, Interval) end)
-    saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap})
+    saveAttr(K_GHOST, {speed = GhostSpeed, gap = GhostGap, rows = GhostRows})
     safe(function() LP:SetAttribute(K_QUICK, QuickGroupId or "") end)
     saveAttr(K_COORDS, Coords)
     saveAttr(K_GROUPS, Groups)
@@ -1929,6 +1955,7 @@ local function applySnapshot(d)
     CamSpeedBox.Text = tostring(SpectateSpeed)
     GhostSpeedBox.Text = tostring(GhostSpeed)
     GhostGapBox.Text = tostring(GhostGap)
+    GhostRowsBox.Text = tostring(GhostRows)
     refreshC()
     refreshG()
     updateQuickUI()
@@ -2131,7 +2158,7 @@ JsnB.MouseButton1Click:Connect(function()
         return HttpService:JSONEncode({
             coords = Coords, groups = Groups,
             quick = QuickGroupId, interval = Interval, speed = Speed,
-            camSpeed = SpectateSpeed, ghostSpeed = GhostSpeed, ghostGap = GhostGap,
+            camSpeed = SpectateSpeed, ghostSpeed = GhostSpeed, ghostGap = GhostGap, ghostRows = GhostRows,
             configs = Configs, activeConfig = ActiveConfig
         })
     end)
@@ -2285,6 +2312,9 @@ if type(gh) == "table" then
         GhostSpeed = gh.hz * 100000
     end
     if type(gh.gap) == "number" and gh.gap > 0 then GhostGap = gh.gap end
+    if type(gh.rows) == "number" and gh.rows >= 1 and gh.rows <= 10 then
+        GhostRows = math.floor(gh.rows)
+    end
 end
 local cfgs = loadAttr(K_CONFIGS)
 if type(cfgs) == "table" then Configs = cfgs end
@@ -2300,6 +2330,7 @@ SpeedBox.Text = tostring(Speed)
 CamSpeedBox.Text = tostring(SpectateSpeed)
 GhostSpeedBox.Text = tostring(GhostSpeed)
 GhostGapBox.Text = tostring(GhostGap)
+GhostRowsBox.Text = tostring(GhostRows)
 updateCfgLabel()
 
 refreshC()
