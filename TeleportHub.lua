@@ -1,4 +1,5 @@
 -- TC坐标传送 · Delta 执行器专用（纯客户端 / 手机竖屏）
+local function TCMain()
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
@@ -306,29 +307,7 @@ local function applyAvatar(btn, txtLabel)
         if txtLabel then txtLabel.Visible = false end
         return true
     end
-    local drawn = pcall(function()
-        local N = 24
-        local cell = 44 / N
-        for gy = 0, N - 1 do
-            for gx = 0, N - 1 do
-                local sx = math.floor(gx * IMG_W / N)
-                local sy = math.floor(gy * IMG_H / N)
-                local idx = string.byte(raw, OFF + sy * IMG_W + sx + 1) or 0
-                if idx ~= 0 then
-                    local r, g, b = avatarColor(raw, idx)
-                    local f = Instance.new("Frame")
-                    f.BorderSizePixel = 0
-                    f.Size = UDim2.new(0, cell + 0.6, 0, cell + 0.6)
-                    f.Position = UDim2.new(0, gx * cell, 0, gy * cell)
-                    f.BackgroundColor3 = Color3.fromRGB(r, g, b)
-                    f.ZIndex = 22
-                    f.Parent = btn
-                end
-            end
-        end
-    end)
-    if drawn and txtLabel then txtLabel.Visible = false end
-    return drawn
+    return false
 end
 
 local spinTween = nil
@@ -530,6 +509,7 @@ local function getPos()
 end
 
 local refreshC, refreshG, startLoop, stopLoop, openManage, applyLayout, switchTab, updateQuickUI, makeDrag
+local startMove, stopMove, updateMoveUI
 local startMove, stopMove, updateMoveUI
 
 local Main = make("Frame", {
@@ -2312,19 +2292,52 @@ if type(act) == "string" and act ~= "" then
     local _, slot = findCfg(act)
     if slot and type(slot.data) == "table" then
         ActiveConfig = act
-        applySnapshot(slot.data)
+        safe(function() applySnapshot(slot.data) end)
     end
 end
-SpeedBox.Text = tostring(Speed)
-CamSpeedBox.Text = tostring(SpectateSpeed)
-GhostSpeedBox.Text = tostring(GhostSpeed)
-GhostGapBox.Text = tostring(GhostGap)
-updateCfgLabel()
+safe(function() SpeedBox.Text = tostring(Speed) end)
+safe(function() CamSpeedBox.Text = tostring(SpectateSpeed) end)
+safe(function() GhostSpeedBox.Text = tostring(GhostSpeed) end)
+safe(function() GhostGapBox.Text = tostring(GhostGap) end)
+safe(function() updateCfgLabel() end)
 
-refreshC()
-refreshG()
-switchTab(1)
-applyLayout()
-updateQuickUI()
-updateMoveUI()
-showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
+safe(function() refreshC() end)
+safe(function() refreshG() end)
+safe(function() switchTab(1) end)
+safe(function() applyLayout() end)
+safe(function() updateQuickUI() end)
+safe(function() updateMoveUI() end)
+safe(function()
+    showToast("TC坐标传送 已加载" .. (ActiveConfig and (" · 配置「" .. ActiveConfig .. "」") or ""))
+end)
+end
+
+local TCOK, TCERR = pcall(TCMain)
+if not TCOK then
+    pcall(function()
+        local pg = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+        local eg = Instance.new("ScreenGui")
+        eg.Name = "TC_ErrorHint"
+        eg.ResetOnSpawn = false
+        eg.DisplayOrder = 99999
+        eg.Parent = pg
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, -20, 0, 130)
+        f.Position = UDim2.new(0, 10, 0.35, 0)
+        f.BackgroundColor3 = Color3.fromRGB(140, 30, 30)
+        f.BorderSizePixel = 0
+        f.Parent = eg
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -16, 1, -16)
+        t.Position = UDim2.new(0, 8, 0, 8)
+        t.BackgroundTransparency = 1
+        t.TextColor3 = Color3.fromRGB(255, 255, 255)
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 13
+        t.TextWrapped = true
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.TextYAlignment = Enum.TextYAlignment.Top
+        t.Text = "TC坐标传送 启动出错:\n" .. tostring(TCERR) .. "\n(截图发我即可定位；数据未丢失)"
+        t.Parent = f
+    end)
+end
